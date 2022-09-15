@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# Replication from MySQL to ClickHouse
 
 import os
 import sys
@@ -299,4 +298,3 @@ def reversed_blocks(fin, block_size=4096):
         here -= delta
         fin.seek(here, os.SEEK_SET)
         yield fin.read(delta)
-
