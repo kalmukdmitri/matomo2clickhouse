@@ -81,6 +81,8 @@ def parse_args():
     parser.add_argument('--help', dest='help', action='store_true', help='help information', default=False)
 
     schema = parser.add_argument_group('schema filter')
+    print(f"{schema = }")
+
     schema.add_argument('-d', '--databases', dest='databases', type=str, nargs='*',
                         help='dbs you want to process', default='')
     schema.add_argument('-t', '--tables', dest='tables', type=str, nargs='*',
