@@ -6,10 +6,13 @@
 import sys
 import settings
 import datetime
+import time
 import pymysql
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
 from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, reversed_lines, is_dml_event, event_type
+from clickhouse_driver import Client
+#
 #
 from pathlib import Path
 
@@ -24,21 +27,37 @@ except:  # from jupiter
 
 #
 #
+def get_now():
+    '''
+    вернет текущую дату и вермя в заданном формате
+    '''
+    dv_time_begin = time.time()
+    dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S')}"
+    # dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S.%f')}"
+    return dv_created
 
 
 class Binlog2sql(object):
 
-    def __init__(self, connection_settings, start_file=None, start_pos=None, end_file=None, end_pos=None,
+    def __init__(self, connection_mysql_setting, connection_clickhouse_setting,
+                 start_file=None, start_pos=None, end_file=None, end_pos=None,
                  start_time=None, stop_time=None, only_schemas=None, only_tables=None, no_pk=False,
                  flashback=False, stop_never=False, back_interval=1.0, only_dml=True, sql_type=None, for_clickhouse=False):
         """
-        conn_setting: {'host': 127.0.0.1, 'port': 3306, 'user': user, 'passwd': passwd, 'charset': 'utf8'}
+        conn_mysql_setting: {'host': 127.0.0.1, 'port': 3306, 'user': user, 'passwd': passwd, 'charset': 'utf8'}
         """
+
+        self.conn_clickhouse_setting = connection_clickhouse_setting
+        # dv_ch_client = Client(**self.conn_clickhouse_setting)
+        # result = dv_ch_client.execute("SHOW DATABASES")
+        # print(f"{result = }")
+
+
 
         if not start_file:
             raise ValueError('Lack of parameter: start_file')
 
-        self.conn_setting = connection_settings
+        self.conn_mysql_setting = connection_mysql_setting
         self.start_file = start_file
         self.start_pos = start_pos if start_pos else 4  # use binlog v4
         self.end_file = end_file
@@ -61,7 +80,7 @@ class Binlog2sql(object):
         self.sql_type = [t.upper() for t in sql_type] if sql_type else []
 
         self.binlogList = []
-        self.connection = pymysql.connect(**self.conn_setting)
+        self.connection = pymysql.connect(**self.conn_mysql_setting)
         with self.connection.cursor() as cursor:
             cursor.execute("SHOW MASTER STATUS")
             self.eof_file, self.eof_pos = cursor.fetchone()[:2]
@@ -89,17 +108,17 @@ class Binlog2sql(object):
             cursor.execute("SELECT @@server_id")
             self.server_id = cursor.fetchone()[0]
             if not self.server_id:
-                raise ValueError('missing server_id in %s:%s' % (self.conn_setting['host'], self.conn_setting['port']))
+                raise ValueError('missing server_id in %s:%s' % (self.conn_mysql_setting['host'], self.conn_mysql_setting['port']))
 
     def process_binlog(self):
-        stream = BinLogStreamReader(connection_settings=self.conn_setting, server_id=self.server_id,
+        stream = BinLogStreamReader(connection_settings=self.conn_mysql_setting, server_id=self.server_id,
                                     log_file=self.start_file, log_pos=self.start_pos, only_schemas=self.only_schemas,
                                     only_tables=self.only_tables, resume_stream=True, blocking=True)
 
         flag_last_event = False
         e_start_pos, last_pos = stream.log_pos, stream.log_pos
         # to simplify code, we do not use flock for tmp_file.
-        tmp_file = create_unique_file('%s.%s' % (self.conn_setting['host'], self.conn_setting['port']))
+        tmp_file = create_unique_file('%s.%s' % (self.conn_mysql_setting['host'], self.conn_mysql_setting['port']))
         with temp_open(tmp_file, "w") as f_tmp, self.connection.cursor() as cursor:
             for binlog_event in stream:
                 if not self.stop_never:
@@ -143,7 +162,10 @@ class Binlog2sql(object):
                                                                                                                        e_start_pos=e_start_pos,
                                                                                                                        for_clickhouse=self.for_clickhouse)
                         sql += ' file %s' % (stream.log_file)
-                        dv_sql_log = 'INSERT INTO `%s`.`log_replication`(`shema`, `table`, `log_file`, `log_pos_start`, `log_pos_end`, `log_time`) VALUES (%s,%s,%s,%s,%s,%s)' % (log_shema, log_shema, log_table, stream.log_file, log_pos_start, log_pos_end, log_time)
+                        dv_sql_log = 'INSERT INTO `%s`.`log_replication`' \
+                                     ' (`log_time`, `log_file`, `log_pos_start`, `log_pos_end`, `db_shema`, `db_table`)'\
+                                     ' VALUES ("%s", "%s", %s, %s, "%s", "%s")' \
+                                     % (log_shema, log_time, stream.log_file, log_pos_start, log_pos_end, log_shema, log_table)
                         # print(dv_sql_log)
                         # print(sql)
                         # print(f"{log_shema = }")
@@ -188,6 +210,18 @@ class Binlog2sql(object):
         pass
 
 
+
+def get_ch_param_for_next(connection_clickhouse_setting):
+    dv_ch_client = Client(**connection_clickhouse_setting)
+    dv_ch_id_max = dv_ch_client.execute("SELECT max(id) AS id_max FROM db1.last_replication")
+    dv_ch_id_max = dv_ch_id_max[0][0]
+    ch_result = dv_ch_client.execute(f"SELECT id, log_time, log_file, log_pos_end FROM db1.last_replication WHERE id={dv_ch_id_max}")
+    log_time = f"{ch_result[0][1].strftime('%Y-%m-%d %H:%M:%S')}"
+    log_file = f"{ch_result[0][2]}"
+    log_pos_end = int(ch_result[0][3])
+    return dv_ch_id_max, log_time, log_file, log_pos_end
+
+
 if __name__ == '__main__':
     # если скрипт вызвали с параметрами, то будем обрабатывать параметры, если без параметров, то возьмем предустановленные параметры из settings.py
     if sys.argv[1:] != []:
@@ -198,12 +232,29 @@ if __name__ == '__main__':
         in_args = settings.args_for_mysql_to_clickhouse[1:]
     # parse args
     args = command_line_args(in_args)
+    # print('***')
+    # print(f"{args = }")
+    # print('***')
+    conn_mysql_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
+    conn_clickhouse_setting = settings.CH_connect
+    #
+    log_id, log_time, log_file, log_pos_end = get_ch_param_for_next(connection_clickhouse_setting=conn_clickhouse_setting)
+    # print(f"{log_id = }")
+    # print(f"{log_time = }")
+    # print(f"{log_file = }")
+    # print(f"{log_pos_end = }")
+    #
+    if args.start_file == '':
+        args.start_file = log_file
+        args.start_pos = log_pos_end
+        args.start_time = log_time
+    #
     print('***')
     print(f"{args = }")
     print('***')
-    conn_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
-    print(f"{args.tables = }")
-    binlog2sql = Binlog2sql(connection_settings=conn_setting,
+    #
+    binlog2sql = Binlog2sql(connection_mysql_setting=conn_mysql_setting,
+                            connection_clickhouse_setting=conn_clickhouse_setting,
                             start_file=args.start_file, start_pos=args.start_pos,
                             end_file=args.end_file, end_pos=args.end_pos,
                             start_time=args.start_time, stop_time=args.stop_time,

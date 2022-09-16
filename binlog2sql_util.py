@@ -80,8 +80,6 @@ def parse_args():
     parser.add_argument('--help', dest='help', action='store_true', help='help information', default=False)
 
     schema = parser.add_argument_group('schema filter')
-    print(f"{schema = }")
-
     schema.add_argument('-d', '--databases', dest='databases', type=str, nargs='*',
                         help='dbs you want to process', default='')
     schema.add_argument('-t', '--tables', dest='tables', type=str, nargs='*',
@@ -114,7 +112,9 @@ def command_line_args(args):
         parser.print_help()
         sys.exit(1)
     if not args.start_file:
-        raise ValueError('Lack of parameter: start_file')
+        args.start_file=''
+    # if not args.start_file:
+    #     raise ValueError('Lack of parameter: start_file')
     if args.flashback and args.stop_never:
         raise ValueError('Only one of flashback or stop-never can be True')
     if args.flashback and args.no_pk:
