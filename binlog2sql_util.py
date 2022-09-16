@@ -176,6 +176,9 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
         raise ValueError('binlog_event must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
 
     sql = ''
+    time = ''
+    log_pos_start = e_start_pos
+    log_pos_end = binlog_event.packet.log_pos
     if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
             or isinstance(binlog_event, DeleteRowsEvent):
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk, for_clickhouse=for_clickhouse)
@@ -188,7 +191,7 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
             sql = 'USE {0};\n'.format(binlog_event.schema)
         sql += '{0};'.format(fix_object(binlog_event.query))
 
-    return sql
+    return sql, log_pos_start, log_pos_end, binlog_event.schema, binlog_event.table, time
 
 
 def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, for_clickhouse=False):
