@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Replication Matomo from MySQL to ClickHouse
-# Репликация Matomo базы данных MySQL в ClickHouse
+# Репликация Matomo: переливка данных из MySQL в ClickHouse
 # 220916
 
 import sys
