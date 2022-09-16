@@ -42,11 +42,16 @@ class Binlog2sql(object):
     def __init__(self, connection_mysql_setting, connection_clickhouse_setting,
                  start_file=None, start_pos=None, end_file=None, end_pos=None,
                  start_time=None, stop_time=None, only_schemas=None, only_tables=None, no_pk=False,
-                 flashback=False, stop_never=False, back_interval=1.0, only_dml=True, sql_type=None, for_clickhouse=False):
+                 flashback=False, stop_never=False, back_interval=1.0, only_dml=True, sql_type=None, for_clickhouse=False,
+                 log_id=None):
         """
         conn_mysql_setting: {'host': 127.0.0.1, 'port': 3306, 'user': user, 'passwd': passwd, 'charset': 'utf8'}
         """
 
+        if log_id is None:
+            raise ValueError('no table "last_replication" in database ClickHouse or problems...')
+        else:
+            self.log_id = int(log_id)
         self.conn_clickhouse_setting = connection_clickhouse_setting
         # dv_ch_client = Client(**self.conn_clickhouse_setting)
         # result = dv_ch_client.execute("SHOW DATABASES")
@@ -162,10 +167,7 @@ class Binlog2sql(object):
                                                                                                                        e_start_pos=e_start_pos,
                                                                                                                        for_clickhouse=self.for_clickhouse)
                         sql += ' file %s' % (stream.log_file)
-                        dv_sql_log = 'INSERT INTO `%s`.`log_replication`' \
-                                     ' (`log_time`, `log_file`, `log_pos_start`, `log_pos_end`, `db_shema`, `db_table`)'\
-                                     ' VALUES ("%s", "%s", %s, %s, "%s", "%s")' \
-                                     % (log_shema, log_time, stream.log_file, log_pos_start, log_pos_end, log_shema, log_table)
+
                         # print(dv_sql_log)
                         # print(sql)
                         # print(f"{log_shema = }")
@@ -175,11 +177,21 @@ class Binlog2sql(object):
                         # print(f"{log_pos_end = }")
                         # print(f"{log_time = }")
                         if self.flashback:
-                            # f_tmp.write(sql + '\n')
-                            f_tmp.write(dv_sql_log + '\n' + sql + '\n')
+                            # dv_sql_log = "ALTER INTO `%s`.`last_replication` DELETE WHERE `id`=%s" % (log_shema, self.log_id)
+                            # self.log_id -= 1
+                            # f_tmp.write(dv_sql_log + '\n' + sql + '\n')
+                            f_tmp.write(sql + '\n')
                         else:
+                            self.log_id += 1
+                            dv_sql_log = "INSERT INTO `%s`.`last_replication` (`id`, `log_time`, `log_file`, `log_pos_start`, `log_pos_end`)" \
+                                         " VALUES (%s, '%s', '%s', %s, %s)" \
+                                         % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end))
                             print(sql)
                             print(dv_sql_log)
+                            dv_ch_client = Client(**self.conn_clickhouse_setting)
+                            dv_ch_client.execute(sql)
+                            dv_ch_client.execute(dv_sql_log)
+
 
                 if not (isinstance(binlog_event, RotateEvent) or isinstance(binlog_event, FormatDescriptionEvent)):
                     last_pos = binlog_event.packet.log_pos
@@ -261,5 +273,6 @@ if __name__ == '__main__':
                             only_schemas=args.databases, only_tables=args.tables,
                             no_pk=args.no_pk, flashback=args.flashback, stop_never=args.stop_never,
                             back_interval=args.back_interval, only_dml=args.only_dml,
-                            sql_type=args.sql_type, for_clickhouse=args.for_clickhouse)
+                            sql_type=args.sql_type, for_clickhouse=args.for_clickhouse,
+                            log_id=log_id)
     binlog2sql.process_binlog()
