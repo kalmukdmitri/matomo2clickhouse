@@ -142,8 +142,17 @@ def fix_object(value):
     """Fixes python objects so that they can be properly inserted into SQL queries"""
     if isinstance(value, set):
         value = ','.join(value)
+    # for i in range(len(value)):
+    #     binary_string = value[i][:-1]
+    #     binary_string = unhexlify(binary_string)
+    #     binary_string = str(binary_string)[2:-1]
+    #     print(binary_string)
     if PY3PLUS and isinstance(value, bytes):
-        return value.decode('utf-8')
+        try:
+            return value.decode('utf-8')
+        except:
+            print(f"{value = }")
+            print(f"{list(value) = }")
     elif not PY3PLUS and isinstance(value, unicode):
         return value.encode('utf-8')
     else:

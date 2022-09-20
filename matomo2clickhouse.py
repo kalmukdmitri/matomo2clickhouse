@@ -52,18 +52,26 @@ class Binlog2sql(object):
             raise ValueError('no table "last_replication" in database ClickHouse or problems...')
         else:
             self.log_id = int(log_id)
+
         self.conn_clickhouse_setting = connection_clickhouse_setting
         # dv_ch_client = Client(**self.conn_clickhouse_setting)
         # result = dv_ch_client.execute("SHOW DATABASES")
         # print(f"{result = }")
 
 
+        self.conn_mysql_setting = connection_mysql_setting
 
         if not start_file:
-            raise ValueError('Lack of parameter: start_file')
+            self.connection = pymysql.connect(**self.conn_mysql_setting)
+            with self.connection.cursor() as cursor:
+                cursor.execute("SHOW MASTER LOGS")
+                binlog_start_file = cursor.fetchone()[:1]
+                self.start_file = binlog_start_file[0]
+            # raise ValueError('Lack of parameter: start_file')
+        else:
+            self.start_file = start_file
 
-        self.conn_mysql_setting = connection_mysql_setting
-        self.start_file = start_file
+
         self.start_pos = start_pos if start_pos else 4  # use binlog v4
         self.end_file = end_file
         self.end_pos = end_pos
@@ -94,13 +102,6 @@ class Binlog2sql(object):
             if self.end_file == '':
                 self.end_file = self.eof_file
 
-            print(f'{self.start_file = }')
-            print(f'{self.start_pos = }')
-            print(f'{self.end_file = }')
-            print(f'{self.end_pos = }')
-            print(f'{self.eof_file = }')
-            print(f'{self.eof_pos = }')
-
             cursor.execute("SHOW MASTER LOGS")
             bin_index = [row[0] for row in cursor.fetchall()]
             if self.start_file not in bin_index:
@@ -109,11 +110,23 @@ class Binlog2sql(object):
             for binary in bin_index:
                 if binlog2i(self.start_file) <= binlog2i(binary) <= binlog2i(self.end_file):
                     self.binlogList.append(binary)
+            # оставляем список только из количества файлов, которые разрешили для обработки за 1 раз (в settings.py)
+            self.binlogList = self.binlogList[:settings.replication_max_number_files_per_session]
 
             cursor.execute("SELECT @@server_id")
             self.server_id = cursor.fetchone()[0]
             if not self.server_id:
                 raise ValueError('missing server_id in %s:%s' % (self.conn_mysql_setting['host'], self.conn_mysql_setting['port']))
+
+            print(f'{self.server_id = }')
+            print(f'{self.start_file = }')
+            print(f'{self.start_pos = }')
+            print(f'{self.end_file = }')
+            print(f'{self.end_pos = }')
+            print(f'{self.eof_file = }')
+            print(f'{self.eof_pos = }')
+            print(f'{self.binlogList = }')
+
 
     def process_binlog(self):
         stream = BinLogStreamReader(connection_settings=self.conn_mysql_setting, server_id=self.server_id,
@@ -121,6 +134,7 @@ class Binlog2sql(object):
                                     only_tables=self.only_tables, resume_stream=True, blocking=True)
 
         flag_last_event = False
+        tmp_count_for = 0
         e_start_pos, last_pos = stream.log_pos, stream.log_pos
         # to simplify code, we do not use flock for tmp_file.
         tmp_file = create_unique_file('%s.%s' % (self.conn_mysql_setting['host'], self.conn_mysql_setting['port']))
@@ -160,6 +174,7 @@ class Binlog2sql(object):
                         print(sql)
                 elif is_dml_event(binlog_event) and event_type(binlog_event) in self.sql_type:
                     for row in binlog_event.rows:
+                        tmp_count_for += 1
                         sql, log_pos_start, log_pos_end, log_shema, log_table, log_time = concat_sql_from_binlog_event(cursor=cursor,
                                                                                                                        binlog_event=binlog_event,
                                                                                                                        no_pk=self.no_pk,
@@ -189,9 +204,12 @@ class Binlog2sql(object):
                             print(sql)
                             print(dv_sql_log)
                             dv_ch_client = Client(**self.conn_clickhouse_setting)
-                            dv_ch_client.execute(sql)
+                            # dv_ch_client.execute(sql)
                             dv_ch_client.execute(dv_sql_log)
-
+                #
+                # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
+                if tmp_count_for >= settings.replication_batch_size:
+                    break
 
                 if not (isinstance(binlog_event, RotateEvent) or isinstance(binlog_event, FormatDescriptionEvent)):
                     last_pos = binlog_event.packet.log_pos
@@ -224,14 +242,27 @@ class Binlog2sql(object):
 
 
 def get_ch_param_for_next(connection_clickhouse_setting):
-    dv_ch_client = Client(**connection_clickhouse_setting)
-    dv_ch_id_max = dv_ch_client.execute("SELECT max(id) AS id_max FROM db1.last_replication")
-    dv_ch_id_max = dv_ch_id_max[0][0]
-    ch_result = dv_ch_client.execute(f"SELECT id, log_time, log_file, log_pos_end FROM db1.last_replication WHERE id={dv_ch_id_max}")
-    log_time = f"{ch_result[0][1].strftime('%Y-%m-%d %H:%M:%S')}"
-    log_file = f"{ch_result[0][2]}"
-    log_pos_end = int(ch_result[0][3])
-    return dv_ch_id_max, log_time, log_file, log_pos_end
+    log_id_max = -1
+    log_time = '1980-01-01 00:00:00'
+    log_file = ''
+    log_pos_end = 0
+    #print(f"WW - {is_dml_event(binlog_event) = }")
+    try:
+        dv_ch_client = Client(**connection_clickhouse_setting)
+        dv_ch_execute = dv_ch_client.execute(f"SELECT max(id) AS id_max FROM {settings.CH_matomo_dbname}.last_replication")
+    except Exception as error:
+        raise error
+    #
+    try:
+        log_id_max = dv_ch_execute[0][0]
+        ch_result = dv_ch_client.execute(f"SELECT id, log_time, log_file, log_pos_end FROM {settings.CH_matomo_dbname}.last_replication WHERE id={log_id_max}")
+        log_time = f"{ch_result[0][1].strftime('%Y-%m-%d %H:%M:%S')}"
+        log_file = f"{ch_result[0][2]}"
+        log_pos_end = int(ch_result[0][3])
+    except:
+        pass
+
+    return log_id_max, log_time, log_file, log_pos_end
 
 
 if __name__ == '__main__':
@@ -250,16 +281,17 @@ if __name__ == '__main__':
     conn_mysql_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
     conn_clickhouse_setting = settings.CH_connect
     #
-    log_id, log_time, log_file, log_pos_end = get_ch_param_for_next(connection_clickhouse_setting=conn_clickhouse_setting)
-    # print(f"{log_id = }")
-    # print(f"{log_time = }")
-    # print(f"{log_file = }")
-    # print(f"{log_pos_end = }")
-    #
+    log_id = 0
     if args.start_file == '':
-        args.start_file = log_file
-        args.start_pos = log_pos_end
-        args.start_time = log_time
+        log_id, log_time, log_file, log_pos_end = get_ch_param_for_next(connection_clickhouse_setting=conn_clickhouse_setting)
+        print(f"{log_id = }")
+        print(f"{log_time = }")
+        print(f"{log_file = }")
+        print(f"{log_pos_end = }")
+        if log_file != '':
+            args.start_file = log_file
+            args.start_pos = log_pos_end
+            args.start_time = log_time
     #
     print('***')
     print(f"{args = }")
@@ -276,3 +308,5 @@ if __name__ == '__main__':
                             sql_type=args.sql_type, for_clickhouse=args.for_clickhouse,
                             log_id=log_id)
     binlog2sql.process_binlog()
+
+
