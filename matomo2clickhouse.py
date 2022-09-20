@@ -135,6 +135,11 @@ class Binlog2sql(object):
 
         flag_last_event = False
         tmp_count_for = 0
+        if self.flashback:
+            self.log_id = self.log_id - settings.replication_batch_size
+            if self.log_id < 0:
+                tmp_count_for = tmp_count_for - self.log_id
+                self.log_id = 0
         e_start_pos, last_pos = stream.log_pos, stream.log_pos
         # to simplify code, we do not use flock for tmp_file.
         tmp_file = create_unique_file('%s.%s' % (self.conn_mysql_setting['host'], self.conn_mysql_setting['port']))
@@ -192,10 +197,11 @@ class Binlog2sql(object):
                         # print(f"{log_pos_end = }")
                         # print(f"{log_time = }")
                         if self.flashback:
-                            # dv_sql_log = "ALTER INTO `%s`.`last_replication` DELETE WHERE `id`=%s" % (log_shema, self.log_id)
-                            # self.log_id -= 1
+                            self.log_id += 1
+                            dv_sql_log = "ALTER TABLE `%s`.`last_replication` DELETE WHERE `id`=%s" % (log_shema, self.log_id)
                             # f_tmp.write(dv_sql_log + '\n' + sql + '\n')
-                            f_tmp.write(sql + '\n')
+                            # f_tmp.write(sql + '\n')
+                            f_tmp.write(dv_sql_log + '\n')
                         else:
                             self.log_id += 1
                             dv_sql_log = "INSERT INTO `%s`.`last_replication` (`id`, `log_time`, `log_file`, `log_pos_start`, `log_pos_end`)" \
@@ -203,9 +209,13 @@ class Binlog2sql(object):
                                          % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end))
                             print(sql)
                             print(dv_sql_log)
-                            dv_ch_client = Client(**self.conn_clickhouse_setting)
-                            # dv_ch_client.execute(sql)
-                            dv_ch_client.execute(dv_sql_log)
+                            # dv_ch_client = Client(**self.conn_clickhouse_setting)
+                            # # dv_ch_client.execute(sql)
+                            # dv_ch_client.execute(dv_sql_log)
+                            # dv_ch_client.disconnect()
+                            with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                                # ch_cursor.execute(sql)
+                                ch_cursor.execute(dv_sql_log)
                 #
                 # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
                 if tmp_count_for >= settings.replication_batch_size:
@@ -229,6 +239,8 @@ class Binlog2sql(object):
             i = 0
             for line in reversed_lines(f_tmp):
                 print(line.rstrip())
+                with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                    ch_cursor.execute(line.rstrip())
                 if i >= batch_size:
                     i = 0
                     if self.back_interval:
