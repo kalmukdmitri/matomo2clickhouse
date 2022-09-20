@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
-# 220916
+# 220920
 
 import sys
 import settings
@@ -49,7 +49,7 @@ class Binlog2sql(object):
         """
 
         if log_id is None:
-            raise ValueError('no table "last_replication" in database ClickHouse or problems...')
+            raise ValueError('no table "log_replication" in database ClickHouse or problems...')
         else:
             self.log_id = int(log_id)
 
@@ -118,14 +118,14 @@ class Binlog2sql(object):
             if not self.server_id:
                 raise ValueError('missing server_id in %s:%s' % (self.conn_mysql_setting['host'], self.conn_mysql_setting['port']))
 
-            print(f'{self.server_id = }')
-            print(f'{self.start_file = }')
-            print(f'{self.start_pos = }')
-            print(f'{self.end_file = }')
-            print(f'{self.end_pos = }')
-            print(f'{self.eof_file = }')
-            print(f'{self.eof_pos = }')
-            print(f'{self.binlogList = }')
+            # print(f'{self.server_id = }')
+            # print(f'{self.start_file = }')
+            # print(f'{self.start_pos = }')
+            # print(f'{self.end_file = }')
+            # print(f'{self.end_pos = }')
+            # print(f'{self.eof_file = }')
+            # print(f'{self.eof_pos = }')
+            # print(f'{self.binlogList = }')
 
 
     def process_binlog(self):
@@ -135,6 +135,7 @@ class Binlog2sql(object):
 
         flag_last_event = False
         tmp_count_for = 0
+        dv_sql_for_execute = ''
         if self.flashback:
             self.log_id = self.log_id - settings.replication_batch_size
             if self.log_id < 0:
@@ -186,7 +187,10 @@ class Binlog2sql(object):
                                                                                                                        row=row, flashback=self.flashback,
                                                                                                                        e_start_pos=e_start_pos,
                                                                                                                        for_clickhouse=self.for_clickhouse)
-                        sql += ' file %s' % (stream.log_file)
+                        if self.for_clickhouse is True:
+                            pass
+                        else:
+                            sql += ' file %s' % (stream.log_file)
 
                         # print(dv_sql_log)
                         # print(sql)
@@ -198,34 +202,37 @@ class Binlog2sql(object):
                         # print(f"{log_time = }")
                         if self.flashback:
                             self.log_id += 1
-                            dv_sql_log = "ALTER TABLE `%s`.`last_replication` DELETE WHERE `id`=%s" % (log_shema, self.log_id)
+                            dv_sql_log = "ALTER TABLE `%s`.`log_replication` DELETE WHERE `id`=%s;" % (log_shema, self.log_id)
                             # f_tmp.write(dv_sql_log + '\n' + sql + '\n')
                             # f_tmp.write(sql + '\n')
                             f_tmp.write(dv_sql_log + '\n')
                         else:
                             self.log_id += 1
-                            dv_sql_log = "INSERT INTO `%s`.`last_replication` (`id`, `log_time`, `log_file`, `log_pos_start`, `log_pos_end`)" \
-                                         " VALUES (%s, '%s', '%s', %s, %s)" \
+                            dv_sql_log = "INSERT INTO `%s`.`log_replication` (`id`, `log_time`, `log_file`, `log_pos_start`, `log_pos_end`)" \
+                                         " VALUES (%s, '%s', '%s', %s, %s);" \
                                          % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end))
-                            print(sql)
-                            print(dv_sql_log)
-                            # dv_ch_client = Client(**self.conn_clickhouse_setting)
-                            # # dv_ch_client.execute(sql)
-                            # dv_ch_client.execute(dv_sql_log)
-                            # dv_ch_client.disconnect()
-                            with Client(**self.conn_clickhouse_setting) as ch_cursor:
-                                # ch_cursor.execute(sql)
-                                ch_cursor.execute(dv_sql_log)
+                            # print(sql)
+                            # print(dv_sql_log)
+                            # with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                            #     ch_cursor.execute(sql)
+                            #     ch_cursor.execute(dv_sql_log)
+                            dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
+                            if (dv_sql_for_execute.count('\n') >= settings.to_clickhouse_batch_size) or (tmp_count_for >= settings.replication_batch_size):
+                                with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                                    print('# ***')
+                                    print(dv_sql_for_execute)
+                                    ch_cursor.execute(dv_sql_for_execute)
+                                    dv_sql_for_execute = ''
                 #
                 # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
                 if tmp_count_for >= settings.replication_batch_size:
                     break
-
+                #
                 if not (isinstance(binlog_event, RotateEvent) or isinstance(binlog_event, FormatDescriptionEvent)):
                     last_pos = binlog_event.packet.log_pos
                 if flag_last_event:
                     break
-
+            #
             stream.close()
             f_tmp.close()
             if self.flashback:
@@ -261,13 +268,13 @@ def get_ch_param_for_next(connection_clickhouse_setting):
     #print(f"WW - {is_dml_event(binlog_event) = }")
     try:
         dv_ch_client = Client(**connection_clickhouse_setting)
-        dv_ch_execute = dv_ch_client.execute(f"SELECT max(id) AS id_max FROM {settings.CH_matomo_dbname}.last_replication")
+        dv_ch_execute = dv_ch_client.execute(f"SELECT max(id) AS id_max FROM {settings.CH_matomo_dbname}.log_replication")
     except Exception as error:
         raise error
     #
     try:
         log_id_max = dv_ch_execute[0][0]
-        ch_result = dv_ch_client.execute(f"SELECT id, log_time, log_file, log_pos_end FROM {settings.CH_matomo_dbname}.last_replication WHERE id={log_id_max}")
+        ch_result = dv_ch_client.execute(f"SELECT id, log_time, log_file, log_pos_end FROM {settings.CH_matomo_dbname}.log_replication WHERE id={log_id_max}")
         log_time = f"{ch_result[0][1].strftime('%Y-%m-%d %H:%M:%S')}"
         log_file = f"{ch_result[0][2]}"
         log_pos_end = int(ch_result[0][3])
@@ -278,6 +285,7 @@ def get_ch_param_for_next(connection_clickhouse_setting):
 
 
 if __name__ == '__main__':
+    print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
     # если скрипт вызвали с параметрами, то будем обрабатывать параметры, если без параметров, то возьмем предустановленные параметры из settings.py
     if sys.argv[1:] != []:
         # print(f"{sys.argv[1:] = }")
@@ -287,27 +295,24 @@ if __name__ == '__main__':
         in_args = settings.args_for_mysql_to_clickhouse[1:]
     # parse args
     args = command_line_args(in_args)
-    # print('***')
-    # print(f"{args = }")
-    # print('***')
     conn_mysql_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
     conn_clickhouse_setting = settings.CH_connect
     #
     log_id = 0
     if args.start_file == '':
         log_id, log_time, log_file, log_pos_end = get_ch_param_for_next(connection_clickhouse_setting=conn_clickhouse_setting)
-        print(f"{log_id = }")
-        print(f"{log_time = }")
-        print(f"{log_file = }")
-        print(f"{log_pos_end = }")
+        # print(f"{log_id = }")
+        # print(f"{log_time = }")
+        # print(f"{log_file = }")
+        # print(f"{log_pos_end = }")
         if log_file != '':
             args.start_file = log_file
             args.start_pos = log_pos_end
             args.start_time = log_time
     #
-    print('***')
-    print(f"{args = }")
-    print('***')
+    # print('***')
+    # print(f"{args = }")
+    # print('***')
     #
     binlog2sql = Binlog2sql(connection_mysql_setting=conn_mysql_setting,
                             connection_clickhouse_setting=conn_clickhouse_setting,
@@ -320,5 +325,4 @@ if __name__ == '__main__':
                             sql_type=args.sql_type, for_clickhouse=args.for_clickhouse,
                             log_id=log_id)
     binlog2sql.process_binlog()
-
-
+    print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")

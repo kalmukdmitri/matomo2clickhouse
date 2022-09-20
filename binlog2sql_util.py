@@ -2,6 +2,7 @@
 
 import os
 import sys
+import re
 import copy
 import argparse
 import datetime
@@ -187,13 +188,28 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
             or isinstance(binlog_event, DeleteRowsEvent):
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk, for_clickhouse=for_clickhouse)
         sql = cursor.mogrify(pattern['template'], pattern['values'])
+        sql = sql.replace('=NULL', ' is NULL')
+        sql = re.sub(r"'([0-9]{1,16}[.][0-9]{1,16})'", r"\1", sql)
+        sql = re.sub(r"([0-9]{1,16}[.][0-9]{1,16})", r"'\1'", sql)
+        # sql = sql.replace("`location_latitude`=", "`location_latitude`='")
+        # sql = sql.replace(" AND `location_longitude`=", "' AND `location_longitude`='")
+        # sql = sql.replace(" AND `location_region`", "' AND `location_region`")
         time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
-        sql += ' # start %s end %s time %s' % (e_start_pos, binlog_event.packet.log_pos, time)
+        if for_clickhouse is True:
+            pass
+        else:
+            sql += ' #! start %s end %s time %s' % (e_start_pos, binlog_event.packet.log_pos, time)
     elif flashback is False and isinstance(binlog_event, QueryEvent) and binlog_event.query != 'BEGIN' \
             and binlog_event.query != 'COMMIT':
-        if binlog_event.schema:
-            sql = 'USE {0};\n'.format(binlog_event.schema)
-        sql += '{0};'.format(fix_object(binlog_event.query))
+        if for_clickhouse is True:
+            if binlog_event.schema:
+                sql = 'USE {0};\n'.format(binlog_event.schema)
+            sql += '{0};'.format(fix_object(binlog_event.query))
+        else:
+            if binlog_event.schema:
+                sql = 'USE {0};\n'.format(binlog_event.schema)
+            sql += '{0};'.format(fix_object(binlog_event.query))
+
 
     return sql, log_pos_start, log_pos_end, binlog_event.schema, binlog_event.table, time
 
@@ -215,11 +231,18 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                 )
             values = map(fix_object, row['values'].values())
         elif isinstance(binlog_event, DeleteRowsEvent):
-            template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                binlog_event.schema, binlog_event.table,
-                ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
-                ', '.join(['%s'] * len(row['values']))
-            )
+            if for_clickhouse is True:
+                template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
+                    binlog_event.schema, binlog_event.table,
+                    ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
+                    ', '.join(['%s'] * len(row['values']))
+                )
+            else:
+                template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
+                    binlog_event.schema, binlog_event.table,
+                    ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
+                    ', '.join(['%s'] * len(row['values']))
+                )
             values = map(fix_object, row['values'].values())
         elif isinstance(binlog_event, UpdateRowsEvent):
             if for_clickhouse is True:
@@ -243,11 +266,18 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                 if binlog_event.primary_key:
                     row['values'].pop(binlog_event.primary_key)
 
-            template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                binlog_event.schema, binlog_event.table,
-                ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
-                ', '.join(['%s'] * len(row['values']))
-            )
+            if for_clickhouse is True:
+                template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
+                    binlog_event.schema, binlog_event.table,
+                    ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
+                    ', '.join(['%s'] * len(row['values']))
+                )
+            else:
+                template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
+                    binlog_event.schema, binlog_event.table,
+                    ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
+                    ', '.join(['%s'] * len(row['values']))
+                )
             values = map(fix_object, row['values'].values())
         elif isinstance(binlog_event, DeleteRowsEvent):
             if for_clickhouse is True:
