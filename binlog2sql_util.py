@@ -188,9 +188,18 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
             or isinstance(binlog_event, DeleteRowsEvent):
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk, for_clickhouse=for_clickhouse)
         sql = cursor.mogrify(pattern['template'], pattern['values'])
+        #
         sql = sql.replace('=NULL', ' is NULL')
-        sql = re.sub(r"'([0-9]{1,16}[.][0-9]{1,16})'", r"\1", sql)
-        sql = re.sub(r"([0-9]{1,16}[.][0-9]{1,16})", r"'\1'", sql)
+        #
+        sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r", \1,", sql)
+        sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r", '\1',", sql)
+        #
+        sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r"`=\1,", sql)
+        sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r"`='\1',", sql)
+        #
+        sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})' AND", r"`=\1 AND", sql)
+        sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}) AND", r"`='\1' AND", sql)
+        #
         # sql = sql.replace("`location_latitude`=", "`location_latitude`='")
         # sql = sql.replace(" AND `location_longitude`=", "' AND `location_longitude`='")
         # sql = sql.replace(" AND `location_region`", "' AND `location_region`")
