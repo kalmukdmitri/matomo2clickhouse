@@ -36,7 +36,6 @@ def get_now():
     # dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S.%f')}"
     return dv_created
 
-
 class Binlog2sql(object):
 
     def __init__(self, connection_mysql_setting, connection_clickhouse_setting,
@@ -285,44 +284,57 @@ def get_ch_param_for_next(connection_clickhouse_setting):
 
 
 if __name__ == '__main__':
-    print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    # если скрипт вызвали с параметрами, то будем обрабатывать параметры, если без параметров, то возьмем предустановленные параметры из settings.py
-    if sys.argv[1:] != []:
-        # print(f"{sys.argv[1:] = }")
-        in_args = sys.argv[1:]
-    else:
-        # print(f"{settings.args_for_mysql_to_clickhouse = }")
-        in_args = settings.args_for_mysql_to_clickhouse[1:]
-    # parse args
-    args = command_line_args(in_args)
-    conn_mysql_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
-    conn_clickhouse_setting = settings.CH_connect
-    #
-    log_id = 0
-    if args.start_file == '':
-        log_id, log_time, log_file, log_pos_end = get_ch_param_for_next(connection_clickhouse_setting=conn_clickhouse_setting)
-        # print(f"{log_id = }")
-        # print(f"{log_time = }")
-        # print(f"{log_file = }")
-        # print(f"{log_pos_end = }")
-        if log_file != '':
-            args.start_file = log_file
-            args.start_pos = log_pos_end
-            args.start_time = log_time
-    #
-    # print('***')
-    # print(f"{args = }")
-    # print('***')
-    #
-    binlog2sql = Binlog2sql(connection_mysql_setting=conn_mysql_setting,
-                            connection_clickhouse_setting=conn_clickhouse_setting,
-                            start_file=args.start_file, start_pos=args.start_pos,
-                            end_file=args.end_file, end_pos=args.end_pos,
-                            start_time=args.start_time, stop_time=args.stop_time,
-                            only_schemas=args.databases, only_tables=args.tables,
-                            no_pk=args.no_pk, flashback=args.flashback, stop_never=args.stop_never,
-                            back_interval=args.back_interval, only_dml=args.only_dml,
-                            sql_type=args.sql_type, for_clickhouse=args.for_clickhouse,
-                            log_id=log_id)
-    binlog2sql.process_binlog()
-    print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
+    try:
+        print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
+        # если скрипт вызвали с параметрами, то будем обрабатывать параметры, если без параметров, то возьмем предустановленные параметры из settings.py
+        if sys.argv[1:] != []:
+            # print(f"{sys.argv[1:] = }")
+            in_args = sys.argv[1:]
+        else:
+            # print(f"{settings.args_for_mysql_to_clickhouse = }")
+            in_args = settings.args_for_mysql_to_clickhouse[1:]
+        # parse args
+        args = command_line_args(in_args)
+        conn_mysql_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
+        conn_clickhouse_setting = settings.CH_connect
+        #
+        log_id = 0
+        if args.start_file == '':
+            log_id, log_time, log_file, log_pos_end = get_ch_param_for_next(connection_clickhouse_setting=conn_clickhouse_setting)
+            # print(f"{log_id = }")
+            # print(f"{log_time = }")
+            # print(f"{log_file = }")
+            # print(f"{log_pos_end = }")
+            if log_file != '':
+                args.start_file = log_file
+                args.start_pos = log_pos_end
+                args.start_time = log_time
+        #
+        # print('***')
+        # print(f"{args = }")
+        # print('***')
+        #
+        binlog2sql = Binlog2sql(connection_mysql_setting=conn_mysql_setting,
+                                connection_clickhouse_setting=conn_clickhouse_setting,
+                                start_file=args.start_file, start_pos=args.start_pos,
+                                end_file=args.end_file, end_pos=args.end_pos,
+                                start_time=args.start_time, stop_time=args.stop_time,
+                                only_schemas=args.databases, only_tables=args.tables,
+                                no_pk=args.no_pk, flashback=args.flashback, stop_never=args.stop_never,
+                                back_interval=args.back_interval, only_dml=args.only_dml,
+                                sql_type=args.sql_type, for_clickhouse=args.for_clickhouse,
+                                log_id=log_id)
+        binlog2sql.process_binlog()
+        print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
+    except Exception as ERROR:
+        dv_tlg_text_to_send = f"matomo2clickhouse: {ERROR = }"
+        print(dv_tlg_text_to_send)
+        try:
+            settings.f_telegram_send_message(tlg_bot_token=settings.TLG_BOT_TOKEN, tlg_chat_id=settings.TLG_CHAT_FOR_SEND,
+                                             txt_type='ERROR',
+                                             txt_to_send=dv_tlg_text_to_send,
+                                             txt_mode=None)
+        except:
+            pass
+        raise ERROR
+
