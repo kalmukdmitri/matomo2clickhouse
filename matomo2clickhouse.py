@@ -3,6 +3,7 @@
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 # 220920
 
+import os
 import sys
 import settings
 import datetime
@@ -24,6 +25,21 @@ except:  # from jupiter
     dv_path_main = dv_path_main.replace('jupyter/', '')
     dv_file_name = 'unknown_file'
 
+# импортируем библиотеку для логирования
+from loguru import logger
+
+# logger.add("log/" + dv_file_name + ".json", level="DEBUG", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8", serialize=True)
+# logger.add("log/" + dv_file_name + ".json", level="WARNING", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8", serialize=True)
+# logger.add("log/" + dv_file_name + ".json", level="INFO", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8", serialize=True)
+if settings.DEBUG is True:
+    logger.add(settings.PATH_TO_LOG + dv_file_name + ".log", level="DEBUG", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8")
+else:
+    logger.remove()  # отключаем логирование в консоль
+    logger.add(settings.PATH_TO_LOG + dv_file_name + ".log", level="WARNING", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8")
+logger.info(f'START')
+logger.info(f'{dv_path_main = }')
+logger.info(f'{dv_file_name = }')
+
 
 #
 #
@@ -35,6 +51,7 @@ def get_now():
     dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S')}"
     # dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S.%f')}"
     return dv_created
+
 
 class Binlog2sql(object):
 
@@ -57,7 +74,6 @@ class Binlog2sql(object):
         # result = dv_ch_client.execute("SHOW DATABASES")
         # print(f"{result = }")
 
-
         self.conn_mysql_setting = connection_mysql_setting
 
         if not start_file:
@@ -69,7 +85,6 @@ class Binlog2sql(object):
             # raise ValueError('Lack of parameter: start_file')
         else:
             self.start_file = start_file
-
 
         self.start_pos = start_pos if start_pos else 4  # use binlog v4
         self.end_file = end_file
@@ -125,7 +140,6 @@ class Binlog2sql(object):
             # print(f'{self.eof_file = }')
             # print(f'{self.eof_pos = }')
             # print(f'{self.binlogList = }')
-
 
     def process_binlog(self):
         dv_time_begin = time.time()
@@ -277,13 +291,12 @@ class Binlog2sql(object):
         pass
 
 
-
 def get_ch_param_for_next(connection_clickhouse_setting):
     log_id_max = -1
     log_time = '1980-01-01 00:00:00'
     log_file = ''
     log_pos_end = 0
-    #print(f"WW - {is_dml_event(binlog_event) = }")
+    # print(f"WW - {is_dml_event(binlog_event) = }")
     try:
         dv_ch_client = Client(**connection_clickhouse_setting)
         dv_ch_execute = dv_ch_client.execute(f"SELECT max(id) AS id_max FROM {settings.CH_matomo_dbname}.log_replication")
@@ -304,11 +317,27 @@ def get_ch_param_for_next(connection_clickhouse_setting):
 
 if __name__ == '__main__':
     dv_time_begin = time.time()
-    print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
+    logger.info(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
     dv_for_send_txt_type = ''
     dv_for_send_text = ''
     #
     try:
+        dv_file_lib_path = f"{settings.PATH_TO_LIB}/matomo2clickhouse.dat"
+        if os.path.exists(dv_file_lib_path):
+            dv_file_lib_open = open(dv_file_lib_path, "r")
+            dv_file_lib_time = next(dv_file_lib_open).strip()
+            dv_file_lib_open.close()
+            tmp_file = datetime.datetime.strptime(dv_file_lib_time, '%Y-%m-%d %H:%M:%S')
+            tmp_now = datetime.datetime.strptime(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+            tmp_seconds = int((tmp_now - tmp_file).total_seconds())
+            if tmp_seconds < 10800:
+                raise Exception(f"Уже выполняется c {dv_file_lib_time} - перед запуском дождитесь завершения предыдущего процесса!")
+        else:
+            dv_file_lib_open = open(dv_file_lib_path, "w")
+            dv_file_lib_time = f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')}"
+            dv_file_lib_open.write(f"{dv_file_lib_time}")
+            dv_file_lib_open.close()
+        #
         # если скрипт вызвали с параметрами, то будем обрабатывать параметры, если без параметров, то возьмем предустановленные параметры из settings.py
         if sys.argv[1:] != []:
             # print(f"{sys.argv[1:] = }")
@@ -348,11 +377,12 @@ if __name__ == '__main__':
                                 sql_type=args.sql_type, for_clickhouse=args.for_clickhouse,
                                 log_id=log_id)
         dv_for_send_txt_type, dv_for_send_text = binlog2sql.process_binlog()
+        os.remove(dv_file_lib_path)
     except Exception as ERROR:
         dv_for_send_txt_type = 'ERROR'
         dv_for_send_text = f"{ERROR = }"
     finally:
-        print(f"{dv_for_send_text}")
+        logger.info(f"{dv_for_send_text}")
         try:
             settings.f_telegram_send_message(tlg_bot_token=settings.TLG_BOT_TOKEN, tlg_chat_id=settings.TLG_CHAT_FOR_SEND,
                                              txt_name='matomo2clickhouse',
@@ -361,6 +391,7 @@ if __name__ == '__main__':
                                              txt_mode=None)
         except:
             pass
-        print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
-        work_time_ms = f"{'{:.0f}'.format(1000 * (time.time() - dv_time_begin))}"
-        print(f"{work_time_ms} мс")
+        logger.info(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
+        work_time_ms = int('{:.0f}'.format(1000 * (time.time() - dv_time_begin)))
+        logger.info(f"{work_time_ms = }")
+        logger.info(f'END')
