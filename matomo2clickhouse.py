@@ -128,117 +128,134 @@ class Binlog2sql(object):
 
 
     def process_binlog(self):
-        stream = BinLogStreamReader(connection_settings=self.conn_mysql_setting, server_id=self.server_id,
-                                    log_file=self.start_file, log_pos=self.start_pos, only_schemas=self.only_schemas,
-                                    only_tables=self.only_tables, resume_stream=True, blocking=True)
+        dv_time_begin = time.time()
+        dv_count_sql_for_ch = 0
+        try:
+            stream = BinLogStreamReader(connection_settings=self.conn_mysql_setting, server_id=self.server_id,
+                                        log_file=self.start_file, log_pos=self.start_pos, only_schemas=self.only_schemas,
+                                        only_tables=self.only_tables, resume_stream=True, blocking=True)
 
-        flag_last_event = False
-        tmp_count_for = 0
-        dv_sql_for_execute = ''
-        if self.flashback:
-            self.log_id = self.log_id - settings.replication_batch_size
-            if self.log_id < 0:
-                tmp_count_for = tmp_count_for - self.log_id
-                self.log_id = 0
-        e_start_pos, last_pos = stream.log_pos, stream.log_pos
-        # to simplify code, we do not use flock for tmp_file.
-        tmp_file = create_unique_file('%s.%s' % (self.conn_mysql_setting['host'], self.conn_mysql_setting['port']))
-        with temp_open(tmp_file, "w") as f_tmp, self.connection.cursor() as cursor:
-            for binlog_event in stream:
-                if not self.stop_never:
-                    try:
-                        event_time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
-                    except OSError:
-                        event_time = datetime.datetime(1980, 1, 1, 0, 0)
-                    if (stream.log_file == self.end_file and stream.log_pos == self.end_pos) or \
-                            (stream.log_file == self.eof_file and stream.log_pos == self.eof_pos):
-                        flag_last_event = True
-                    elif event_time < self.start_time:
-                        if not (isinstance(binlog_event, RotateEvent)
-                                or isinstance(binlog_event, FormatDescriptionEvent)):
-                            last_pos = binlog_event.packet.log_pos
-                        continue
-                    elif (stream.log_file not in self.binlogList) or \
-                            (self.end_pos and stream.log_file == self.end_file and stream.log_pos > self.end_pos) or \
-                            (stream.log_file == self.eof_file and stream.log_pos > self.eof_pos) or \
-                            (event_time >= self.stop_time):
-                        break
-                    # else:
-                    #     raise ValueError('unknown binlog file or position')
+            flag_last_event = False
+            dv_sql_for_execute = ''
+            if self.flashback:
+                self.log_id = self.log_id - settings.replication_batch_size
+                if self.log_id < 0:
+                    dv_count_sql_for_ch = dv_count_sql_for_ch - self.log_id
+                    self.log_id = 0
+            e_start_pos, last_pos = stream.log_pos, stream.log_pos
+            # to simplify code, we do not use flock for tmp_file.
+            tmp_file = create_unique_file('%s.%s' % (self.conn_mysql_setting['host'], self.conn_mysql_setting['port']))
+            with temp_open(tmp_file, "w") as f_tmp, self.connection.cursor() as cursor:
+                for binlog_event in stream:
+                    if not self.stop_never:
+                        try:
+                            event_time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
+                        except OSError:
+                            event_time = datetime.datetime(1980, 1, 1, 0, 0)
+                        if (stream.log_file == self.end_file and stream.log_pos == self.end_pos) or \
+                                (stream.log_file == self.eof_file and stream.log_pos == self.eof_pos):
+                            flag_last_event = True
+                        elif event_time < self.start_time:
+                            if not (isinstance(binlog_event, RotateEvent)
+                                    or isinstance(binlog_event, FormatDescriptionEvent)):
+                                last_pos = binlog_event.packet.log_pos
+                            continue
+                        elif (stream.log_file not in self.binlogList) or \
+                                (self.end_pos and stream.log_file == self.end_file and stream.log_pos > self.end_pos) or \
+                                (stream.log_file == self.eof_file and stream.log_pos > self.eof_pos) or \
+                                (event_time >= self.stop_time):
+                            break
+                        # else:
+                        #     raise ValueError('unknown binlog file or position')
 
-                if isinstance(binlog_event, QueryEvent) and binlog_event.query == 'BEGIN':
-                    e_start_pos = last_pos
+                    if isinstance(binlog_event, QueryEvent) and binlog_event.query == 'BEGIN':
+                        e_start_pos = last_pos
 
-                if isinstance(binlog_event, QueryEvent) and not self.only_dml:
-                    sql, log_pos_start, log_pos_end, log_shema, log_table, log_time = concat_sql_from_binlog_event(cursor=cursor,
-                                                                                                                   binlog_event=binlog_event,
-                                                                                                                   no_pk=self.no_pk,
-                                                                                                                   flashback=self.flashback,
-                                                                                                                   for_clickhouse=self.for_clickhouse)
-                    if sql:
-                        print(sql)
-                elif is_dml_event(binlog_event) and event_type(binlog_event) in self.sql_type:
-                    for row in binlog_event.rows:
-                        tmp_count_for += 1
+                    if isinstance(binlog_event, QueryEvent) and not self.only_dml:
                         sql, log_pos_start, log_pos_end, log_shema, log_table, log_time = concat_sql_from_binlog_event(cursor=cursor,
                                                                                                                        binlog_event=binlog_event,
                                                                                                                        no_pk=self.no_pk,
-                                                                                                                       row=row, flashback=self.flashback,
-                                                                                                                       e_start_pos=e_start_pos,
+                                                                                                                       flashback=self.flashback,
                                                                                                                        for_clickhouse=self.for_clickhouse)
-                        if self.for_clickhouse is True:
-                            pass
-                        else:
-                            sql += ' file %s' % (stream.log_file)
+                        if sql:
+                            print(sql)
+                    elif is_dml_event(binlog_event) and event_type(binlog_event) in self.sql_type:
+                        for row in binlog_event.rows:
+                            dv_count_sql_for_ch += 1
+                            sql, log_pos_start, log_pos_end, log_shema, log_table, log_time = concat_sql_from_binlog_event(cursor=cursor,
+                                                                                                                           binlog_event=binlog_event,
+                                                                                                                           no_pk=self.no_pk,
+                                                                                                                           row=row, flashback=self.flashback,
+                                                                                                                           e_start_pos=e_start_pos,
+                                                                                                                           for_clickhouse=self.for_clickhouse)
+                            if self.for_clickhouse is True:
+                                pass
+                            else:
+                                sql += ' file %s' % (stream.log_file)
 
-                        # print(dv_sql_log)
-                        # print(sql)
-                        # print(f"{log_shema = }")
-                        # print(f"{log_table = }")
-                        # print(f"{stream.log_file = }")
-                        # print(f"{log_pos_start = }")
-                        # print(f"{log_pos_end = }")
-                        # print(f"{log_time = }")
-                        if self.flashback:
-                            self.log_id += 1
-                            dv_sql_log = "ALTER TABLE `%s`.`log_replication` DELETE WHERE `id`=%s;" % (log_shema, self.log_id)
-                            # f_tmp.write(dv_sql_log + '\n' + sql + '\n')
-                            # f_tmp.write(sql + '\n')
-                            f_tmp.write(dv_sql_log + '\n')
-                        else:
-                            self.log_id += 1
-                            dv_sql_log = "INSERT INTO `%s`.`log_replication` (`id`,`log_time`,`log_file`,`log_pos_start`,`log_pos_end`)" \
-                                         " VALUES (%s,'%s','%s',%s,%s);" \
-                                         % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end))
+                            # print(dv_sql_log)
+                            # print(sql)
+                            # print(f"{log_shema = }")
+                            # print(f"{log_table = }")
+                            # print(f"{stream.log_file = }")
+                            # print(f"{log_pos_start = }")
+                            # print(f"{log_pos_end = }")
+                            # print(f"{log_time = }")
+                            if self.flashback:
+                                self.log_id += 1
+                                dv_sql_log = "ALTER TABLE `%s`.`log_replication` DELETE WHERE `id`=%s;" % (log_shema, self.log_id)
+                                # f_tmp.write(dv_sql_log + '\n' + sql + '\n')
+                                # f_tmp.write(sql + '\n')
+                                f_tmp.write(dv_sql_log + '\n')
+                            else:
+                                self.log_id += 1
+                                dv_sql_log = "INSERT INTO `%s`.`log_replication` (`id`,`log_time`,`log_file`,`log_pos_start`,`log_pos_end`)" \
+                                             " VALUES (%s,'%s','%s',%s,%s);" \
+                                             % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end))
 
-                            with Client(**self.conn_clickhouse_setting) as ch_cursor:
-                                # print(sql)
-                                ch_cursor.execute(sql)
-                                # print(dv_sql_log)
-                                ch_cursor.execute(dv_sql_log)
-                            #
-                            # dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
-                            # if (dv_sql_for_execute.count('\n') >= settings.to_clickhouse_batch_size) or (tmp_count_for >= settings.replication_batch_size):
-                            #     with Client(**self.conn_clickhouse_setting) as ch_cursor:
-                            #         print('# ***')
-                            #         print(dv_sql_for_execute)
-                            #         ch_cursor.execute(dv_sql_for_execute)
-                            #         dv_sql_for_execute = ''
+                                with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                                    dv_sql_for_execute = sql
+                                    # print(dv_sql_for_execute)
+                                    ch_cursor.execute(dv_sql_for_execute)
+                                    dv_sql_for_execute = dv_sql_log
+                                    # print(dv_sql_for_execute)
+                                    ch_cursor.execute(dv_sql_for_execute)
+                                    dv_sql_for_execute = ''
+                                #
+                                # dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
+                                # if (dv_sql_for_execute.count('\n') >= settings.to_clickhouse_batch_size) or (dv_count_sql_for_ch >= settings.replication_batch_size):
+                                #     with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                                #         print('# ***')
+                                #         print(dv_sql_for_execute)
+                                #         ch_cursor.execute(dv_sql_for_execute)
+                                #         dv_sql_for_execute = ''
+                    #
+                    # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
+                    if dv_count_sql_for_ch >= settings.replication_batch_size:
+                        break
+                    #
+                    if not (isinstance(binlog_event, RotateEvent) or isinstance(binlog_event, FormatDescriptionEvent)):
+                        last_pos = binlog_event.packet.log_pos
+                    if flag_last_event:
+                        break
                 #
-                # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
-                if tmp_count_for >= settings.replication_batch_size:
-                    break
-                #
-                if not (isinstance(binlog_event, RotateEvent) or isinstance(binlog_event, FormatDescriptionEvent)):
-                    last_pos = binlog_event.packet.log_pos
-                if flag_last_event:
-                    break
-            #
-            stream.close()
-            f_tmp.close()
-            if self.flashback:
-                self.print_rollback_sql(filename=tmp_file)
-        return True
+                stream.close()
+                f_tmp.close()
+                if self.flashback:
+                    self.print_rollback_sql(filename=tmp_file)
+
+        except Exception as ERROR:
+            f_status = 'ERROR'
+            if dv_sql_for_execute != '':
+                f_text = f"'ERROR = LAST_SQL:\n\n{dv_sql_for_execute}\n\n{ERROR = }"
+            else:
+                f_text = f"{ERROR}"
+        else:
+            work_time_ms = f"{'{:.0f}'.format(1000 * (time.time() - dv_time_begin))}"
+            f_status = 'SUCCESS'
+            f_text = f"{f_status} = Успешно обработано {dv_count_sql_for_ch} строк за {work_time_ms} мс."
+
+        return f_status, f_text
 
     def print_rollback_sql(self, filename):
         """print rollback sql from tmp_file"""
@@ -286,8 +303,12 @@ def get_ch_param_for_next(connection_clickhouse_setting):
 
 
 if __name__ == '__main__':
+    dv_time_begin = time.time()
+    print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
+    dv_for_send_txt_type = ''
+    dv_for_send_text = ''
+    #
     try:
-        print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
         # если скрипт вызвали с параметрами, то будем обрабатывать параметры, если без параметров, то возьмем предустановленные параметры из settings.py
         if sys.argv[1:] != []:
             # print(f"{sys.argv[1:] = }")
@@ -326,17 +347,20 @@ if __name__ == '__main__':
                                 back_interval=args.back_interval, only_dml=args.only_dml,
                                 sql_type=args.sql_type, for_clickhouse=args.for_clickhouse,
                                 log_id=log_id)
-        binlog2sql.process_binlog()
-        print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
+        dv_for_send_txt_type, dv_for_send_text = binlog2sql.process_binlog()
     except Exception as ERROR:
-        dv_tlg_text_to_send = f"matomo2clickhouse: {ERROR = }"
-        print(dv_tlg_text_to_send)
+        dv_for_send_txt_type = 'ERROR'
+        dv_for_send_text = f"{ERROR = }"
+    finally:
+        print(f"{dv_for_send_text}")
         try:
             settings.f_telegram_send_message(tlg_bot_token=settings.TLG_BOT_TOKEN, tlg_chat_id=settings.TLG_CHAT_FOR_SEND,
-                                             txt_type='ERROR',
-                                             txt_to_send=dv_tlg_text_to_send,
+                                             txt_name='matomo2clickhouse',
+                                             txt_type=dv_for_send_txt_type,
+                                             txt_to_send=f"{dv_for_send_text}",
                                              txt_mode=None)
         except:
             pass
-        raise ERROR
-
+        print(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
+        work_time_ms = f"{'{:.0f}'.format(1000 * (time.time() - dv_time_begin))}"
+        print(f"{work_time_ms} мс")

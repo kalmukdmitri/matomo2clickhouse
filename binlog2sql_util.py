@@ -21,6 +21,10 @@ else:
     PY3PLUS = False
 
 
+def re_sub_convert_datetime(matchobj):
+    out_txt = f"{matchobj.group(2).zfill(4)}-{matchobj.group(3).zfill(2)}-{matchobj.group(4).zfill(2)} {matchobj.group(5).zfill(2)}:{matchobj.group(6).zfill(2)}:{matchobj.group(6).zfill(2)}"
+    return out_txt
+
 def is_valid_datetime(string):
     try:
         datetime.datetime.strptime(string, "%Y-%m-%d %H:%M:%S")
@@ -144,10 +148,29 @@ def fix_object(value):
     if isinstance(value, set):
         value = ','.join(value)
     if PY3PLUS and isinstance(value, bytes):
-        try:
-            value = value.decode('utf-8')
-        except:
+        if type(value) is bytes:
             value = value.hex()
+        else:
+            value = value.decode('utf-8')
+        # try:
+        #     print(f"")
+        #     print(f"*-*")
+        #     print(f"{value = }")
+        #     print(f"{type(value) = }")
+        #     value = value.decode('utf-8')
+        #     value = re.sub(r"Decimal\('([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})'\)", r"'\1'", value)
+        #     print(f"{value = }")
+        #     print(f"*-*")
+        #     print(f"")
+        # except:
+        #     print(f"")
+        #     print(f"*-EEE-*")
+        #     print(f"{type(value) = }")
+        #     print(f"{value = }")
+        #     value = value.hex()
+        #     print(f"{value = }")
+        #     print(f"*-EEE-*")
+        #     print(f"")
         return value
     elif not PY3PLUS and isinstance(value, unicode):
         return value.encode('utf-8')
@@ -187,9 +210,10 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
     if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
             or isinstance(binlog_event, DeleteRowsEvent):
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk, for_clickhouse=for_clickhouse)
+        # print(f"{pattern = }")
         sql = cursor.mogrify(pattern['template'], pattern['values'])
         #
-        sql = sql.replace('=NULL', ' is NULL')
+        # sql = sql.replace('=NULL', ' is NULL')
         #
         sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r", \1,", sql)
         sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r", '\1',", sql)
@@ -274,7 +298,6 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                 #     row['values'].pop(tableInfo.primary_key)
                 if binlog_event.primary_key:
                     row['values'].pop(binlog_event.primary_key)
-
             if for_clickhouse is True:
                 template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
                     binlog_event.schema, binlog_event.table,
@@ -297,6 +320,32 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                     binlog_event.schema, binlog_event.table, ' AND '.join(map(compare_items, row['values'].items())))
             values = map(fix_object, row['values'].values())
         elif isinstance(binlog_event, UpdateRowsEvent):
+
+            # print(type(row))
+            # print(f"01 {row = }")
+            #
+            # dv_tmp_values = str(row)
+            # print(f"02 {dv_tmp_values = }")
+            #
+            # dv_tmp_values = re.sub(r"Decimal\('([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})'\)", r"'\1'", dv_tmp_values)
+            # print(f"03 {dv_tmp_values = }")
+            #
+            # # dv_tmp_values = re.sub(r"b'(\\.*?)'", r"'dix_bin\1'", dv_tmp_values)
+            # dv_tmp_values = re.sub(r"(b'\\.*?')", r"''", dv_tmp_values)
+            # print(f"04 {dv_tmp_values = }")
+            #
+            # dv_tmp_values = re.sub(r"(datetime.datetime\()([0-9]{4}), ([0-9]{1,2}), ([0-9]{1,2}), ([0-9]{1,2}), ([0-9]{1,2}), ([0-9]{1,2})(.*?)(\))",
+            #                        re_sub_convert_datetime, dv_tmp_values)
+            # print(f"05 {dv_tmp_values = }")
+
+            # import ast
+            # row = ast.literal_eval(dv_tmp_values)
+            # print(f"06 {row = }")
+            # print(f"07 {ast.literal_eval(dv_tmp_values) = }")
+
+
+
+
             if for_clickhouse is True:
                 # если новое значение=старому, то обновлять его не будем.
                 # ВНИМАНИЕ! это необходимо для того, чтобы первичные ключи не ругались (их нельзя обновлять!)
@@ -317,6 +366,8 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                 )
             values = map(fix_object, list(row['after_values'].values()) + list(row['before_values'].values()))
 
+    # print(f"{row['before_values'] = }")
+    # print(f"{list(values) = }")
     return {'template': template, 'values': list(values)}
 
 
