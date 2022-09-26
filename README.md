@@ -4,7 +4,7 @@ Replication Matomo from MySQL to ClickHouse (Репликация Matomo: пер
 
 Сначала настроить, потом вручную запускать проект: ```matomo2clickhouse_start.sh```
 
-Для автоматизации можно настроить запуск через cron команду:
+Для автоматизации можно настроить в cron выполнение команды:
 
 ```pipenv run python3 matomo2clickhouse.py```
 
@@ -36,8 +36,10 @@ Replication Matomo from MySQL to ClickHouse (Репликация Matomo: пер
 
 ```pipenv sync```
 
-- Отредактировать файл _settings.py (описание все настроек внутри файла!)
-- Настроить регулярный запуск (например, через cron) файла  
+- Редактируем файл _settings.py (описание все настроек внутри файла!)
+- Настраиваем регулярное выполнение (например, через cron) команды
+
+```pipenv run python3 matomo2clickhouse.py```
 
 
 ### MySQL
