@@ -22,12 +22,6 @@ CH_matomo_dbname = MySQL_matomo_dbname
 #
 #
 #
-#
-# За основу для реализации взят этот скрипт: https://github.com/danfengcao/binlog2sql
-# Основы репликации в MySQL: https://habr.com/ru/post/56702/
-# Настройка репликации в MySQL: https://timeweb.cloud/blog/kak-nastroit-replikatsiyu-v-mysql
-# Как записать данные в Clickhouse с помощью Python: https://ivan-shamaev.ru/how-to-write-data-to-clickhouse-using-python/#_database_Clickhouse
-#
 # *** Настройки ***
 # для избыточного логирования True, иначе False
 DEBUG = True
@@ -89,9 +83,42 @@ TLG_BOT_TOKEN = ''
 # идентификатор группы можно узнать с помощью бота @username_to_id_bot (регистрируемся, отправляем ссылку на группу, получаем id)
 TLG_CHAT_FOR_SEND = 000
 #
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+# ВНИМАНИЕ!!! Дальше настройки работы. Перед тем как их трогать НЕОБХОДИМО разобраться в настройках и понимать что к чему!
+#
+MySQL_connect = [f"-h{MySQL_matomo_host}",
+                 f"-P{MySQL_matomo_port}",
+                 f"-u{MySQL_matomo_user}",
+                 f"-p{MySQL_matomo_password}",
+                 f"-d{MySQL_matomo_dbname}",
+                 ]
+CH_connect = {'host': CH_matomo_host, 'port': CH_matomo_port, 'database': CH_matomo_dbname}
+#
+#
+# Переменная с параметрами для выгрузки бинлога MySQL в ClickHouse
+args_for_mysql_to_clickhouse = [''] + \
+                               MySQL_connect + \
+                               ['-t'] + replication_tables + \
+                               ['--for_clickhouse', '--only-dml']
+#
+#
+#
+#
+#
 import telebot
 
 
+#
+#
 def f_telegram_send_message(tlg_bot_token='', tlg_chat_id=None, txt_to_send='', txt_mode=None, txt_type='', txt_name=''):
     '''
     функция отправляет в указанный чат телеграма текст
@@ -121,27 +148,3 @@ def f_telegram_send_message(tlg_bot_token='', tlg_chat_id=None, txt_to_send='', 
         return f"chat_id = {tlg_chat_id} | message_id = {tmp_out.id} | html_text = '{tmp_out.html_text}'"
     except Exception as error:
         return f"ERROR: {error}"
-
-
-#
-#
-#
-#
-#
-#
-# ВНИМАНИЕ!!! Дальше настройки работы. Перед тем как их трогать НЕОБХОДИМО разобраться в настройках и понимать что к чему!
-#
-MySQL_connect = [f"-h{MySQL_matomo_host}",
-                 f"-P{MySQL_matomo_port}",
-                 f"-u{MySQL_matomo_user}",
-                 f"-p{MySQL_matomo_password}",
-                 f"-d{MySQL_matomo_dbname}",
-                 ]
-CH_connect = {'host': CH_matomo_host, 'port': CH_matomo_port, 'database': CH_matomo_dbname}
-#
-#
-# Переменная с параметрами для выгрузки бинлога MySQL в ClickHouse
-args_for_mysql_to_clickhouse = [''] + \
-                               MySQL_connect + \
-                               ['-t'] + replication_tables + \
-                               ['--for_clickhouse', '--only-dml']
