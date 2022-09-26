@@ -68,7 +68,7 @@ binlog_do_db = название базы, (можно несколько стр�
 
 - В базе MySQL завести пользователя и задать ему права
 
-```GRANT SELECT, PROCESS, SUPER, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'usera'@'%';```
+```GRANT SELECT, PROCESS, SUPER, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'user'@'%';```
 
 
 ### ClickHouse
