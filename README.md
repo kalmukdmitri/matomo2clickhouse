@@ -37,7 +37,7 @@ Replication Matomo from MySQL to ClickHouse (Репликация Matomo: пер
 ```pipenv sync```
 
 - Редактируем файл _settings.py (описание все настроек внутри файла!)
-- Настраиваем регулярное выполнение (например, через cron) команды
+- Настраиваем регулярное выполнение (например, через cron) команды:
 
 ```pipenv run python3 matomo2clickhouse.py```
 
