@@ -50,7 +50,7 @@ Replication Matomo from MySQL to ClickHouse (Репликация Matomo: пер
 - Для работы репликации в MySQL нужно включить binlog. Внимание: необходимо предусмотреть чтобы было достаточно места на диске для бинлога!
 
 ```
-Для MariaDB задаем значения /etc/mysql/mariadb.conf.d/50-server.cnf:
+Редактируем /etc/mysql/mariadb.conf.d/50-server.cnf (файл может быть в другом месте):
 
 [mysqld]:
 default-authentication-plugin = mysql_native_password
