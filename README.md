@@ -2,7 +2,11 @@
 
 Replication Matomo from MySQL to ClickHouse (Репликация Matomo: переливка данных из MySQL в ClickHouse)
 
-После настроек проект запускается выполнением файла ```matomo2clickhouse_start.sh``` 
+Сначала настроить, потом вручную запускать проект: ```matomo2clickhouse_start.sh```
+
+Для автоматизации можно настроить запуск через cron команду:
+
+```pipenv run python3 matomo2clickhouse.py```
 
 
 ### Кратко весь процесс:
