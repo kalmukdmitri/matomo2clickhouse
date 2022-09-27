@@ -227,22 +227,23 @@ class Binlog2sql(object):
                                              " VALUES (%s,'%s','%s',%s,%s);" \
                                              % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end))
 
-                                with Client(**self.conn_clickhouse_setting) as ch_cursor:
-                                    dv_sql_for_execute = sql
-                                    # print(dv_sql_for_execute)
-                                    ch_cursor.execute(dv_sql_for_execute)
-                                    dv_sql_for_execute = dv_sql_log
-                                    # print(dv_sql_for_execute)
-                                    ch_cursor.execute(dv_sql_for_execute)
-                                    dv_sql_for_execute = ''
-                                #
-                                # dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
-                                # if (dv_sql_for_execute.count('\n') >= settings.to_clickhouse_batch_size) or (dv_count_sql_for_ch >= settings.replication_batch_size):
-                                #     with Client(**self.conn_clickhouse_setting) as ch_cursor:
-                                #         print('# ***')
-                                #         print(dv_sql_for_execute)
-                                #         ch_cursor.execute(dv_sql_for_execute)
-                                #         dv_sql_for_execute = ''
+                                if settings.replication_batch_sql == 0:
+                                    with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                                        dv_sql_for_execute = sql
+                                        # print(dv_sql_for_execute)
+                                        ch_cursor.execute(dv_sql_for_execute)
+                                        dv_sql_for_execute = dv_sql_log
+                                        # print(dv_sql_for_execute)
+                                        ch_cursor.execute(dv_sql_for_execute)
+                                        dv_sql_for_execute = ''
+                                else:
+                                    dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
+                                    if (dv_sql_for_execute.count('\n') >= settings.replication_batch_sql) or (dv_count_sql_for_ch >= settings.replication_batch_size):
+                                        with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                                            print('# ***')
+                                            print(dv_sql_for_execute)
+                                            ch_cursor.execute(dv_sql_for_execute)
+                                            dv_sql_for_execute = ''
                     #
                     # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
                     if dv_count_sql_for_ch >= settings.replication_batch_size:
