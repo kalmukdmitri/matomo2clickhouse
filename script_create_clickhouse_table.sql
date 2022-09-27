@@ -1,8 +1,8 @@
-DROP DATABASE dba;
+DROP DATABASE `matomo`;
 
-CREATE DATABASE IF NOT EXISTS `dba`;
+CREATE DATABASE IF NOT EXISTS `matomo`;
 
-CREATE TABLE IF NOT EXISTS dba.log_replication (
+CREATE TABLE IF NOT EXISTS `matomo`.`log_replication` (
     `id` UInt64,
     `log_time` DateTime,
     `log_file` String,
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS dba.log_replication (
 )
 ENGINE = ReplacingMergeTree() ORDER BY (id) SETTINGS index_granularity = 8192;
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_visit`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_visit`  (
     `idvisit` UInt64,
     `idsite` UInt32,
     `idvisitor` String,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_visit`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(visit_first_action_time) ORDER BY (idvisit);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_link_visit_action`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_link_visit_action`  (
     `idlink_va` UInt64,
     `idsite` UInt32,
     `idvisitor` String,
@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_link_visit_action`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(server_time) ORDER BY (idlink_va);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_conversion_item`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_conversion_item`  (
     `idsite` UInt32,
     `idvisitor` String,
     `server_time` DateTime,
@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_conversion_item`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(server_time) ORDER BY (idvisit,idorder,idaction_sku);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_conversion`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_conversion`  (
     `idvisit` UInt64,
     `idsite` UInt32,
     `idvisitor` String,
@@ -228,7 +228,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_conversion`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(server_time) ORDER BY (idvisit,idsite,idgoal,buster);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_profiling`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_profiling`  (
     `query` String,
     `count` Nullable(UInt32),
     `sum_time_ms` Nullable(String),
@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_profiling`  (
 ) 
 ENGINE = ReplacingMergeTree() ORDER BY (idprofiling);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_action`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_action`  (
     `idaction` UInt32,
     `name` Nullable(String),
     `hash` UInt32,
@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_log_action`  (
 ) 
 ENGINE = ReplacingMergeTree() ORDER BY (idaction);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_goal`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_goal`  (
     `idsite` Int32,
     `idgoal` Int32,
     `name` String,
@@ -261,7 +261,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_goal`  (
 ) 
 ENGINE = ReplacingMergeTree() ORDER BY (idsite,idgoal);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_site`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_site`  (
     `idsite` UInt32,
     `name` String,
     `main_url` String,
@@ -283,13 +283,13 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_site`  (
 ) 
 ENGINE = ReplacingMergeTree() ORDER BY (idsite);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_site_url`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_site_url`  (
     `idsite` UInt32,
     `url` String
 ) 
 ENGINE = ReplacingMergeTree() ORDER BY (idsite,url);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_tag`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_tagmanager_tag`  (
     `idtag` UInt64,
     `idcontainerversion` UInt64,
     `idsite` UInt32,
@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_tag`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(start_date) ORDER BY (idtag,idsite);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_variable`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_tagmanager_variable`  (
     `idvariable` UInt64,
     `idcontainerversion` UInt64,
     `idsite` UInt32,
@@ -326,7 +326,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_variable`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(created_date) ORDER BY (idvariable,idsite);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_container_version`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_tagmanager_container_version`  (
     `idcontainerversion` UInt64,
     `idcontainer` String,
     `idsite` UInt32,
@@ -340,7 +340,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_container_version`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(created_date) ORDER BY (idcontainerversion,idcontainer,idsite);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_container_release`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_tagmanager_container_release`  (
     `idcontainerrelease` Int64,
     `idcontainer` String,
     `idcontainerversion` UInt64,
@@ -353,7 +353,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_container_release`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(release_date) ORDER BY (idcontainerrelease,idsite);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_container`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_tagmanager_container`  (
     `idcontainer` String,
     `idsite` UInt32,
     `context` String,
@@ -366,7 +366,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_container`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(created_date) ORDER BY (idcontainer,idsite);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_trigger`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_tagmanager_trigger`  (
     `idtrigger` UInt64,
     `idcontainerversion` UInt64,
     `idsite` UInt32,
@@ -381,7 +381,7 @@ CREATE TABLE IF NOT EXISTS `dba`.`matomo_tagmanager_trigger`  (
 ) 
 ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(created_date) ORDER BY (idtrigger,idsite);
 
-CREATE TABLE IF NOT EXISTS `dba`.`matomo_custom_dimensions`  (
+CREATE TABLE IF NOT EXISTS `matomo`.`matomo_custom_dimensions`  (
     `idcustomdimension` UInt64,
     `idsite` UInt64,
     `name` String,

@@ -12,7 +12,7 @@ MySQL_matomo_host = '192.168.5.'
 MySQL_matomo_port = 3306
 MySQL_matomo_user = ''
 MySQL_matomo_password = ''
-MySQL_matomo_dbname = 'dba'
+MySQL_matomo_dbname = 'matomo'
 #
 CH_matomo_host = '192.168.5.'
 CH_matomo_port = 9000
