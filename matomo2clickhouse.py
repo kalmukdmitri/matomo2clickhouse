@@ -348,7 +348,8 @@ if __name__ == '__main__':
             in_args = settings.args_for_mysql_to_clickhouse[1:]
         # parse args
         args = command_line_args(in_args)
-        conn_mysql_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
+        # conn_mysql_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
+        conn_mysql_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8mb4'}
         conn_clickhouse_setting = settings.CH_connect
         #
         log_id = 0
