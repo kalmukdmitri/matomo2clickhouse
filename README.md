@@ -17,7 +17,7 @@ Replication Matomo from MySQL to ClickHouse (Репликация Matomo: пер
 
 ### MySQL
 - Matomo может использовать MySQL/MariaDB/Percona или другие DB семейства MySQL, далее будем это всё называть MySQL
-- Для работы python с MySQL скорее всего сначала потребуется установить клиентскую библиотеку для ос, поэтому пробуем установить:
+- Для работы python с MySQL скорее всего сначала потребуется установить клиентскую библиотеку для ОС, поэтому пробуем установить:
 
 ```sudo apt install libmysqlclient-dev```
 
