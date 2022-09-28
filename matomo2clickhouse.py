@@ -238,7 +238,8 @@ class Binlog2sql(object):
                                         dv_sql_for_execute = ''
                                 else:
                                     dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
-                                    if (dv_sql_for_execute.count('\n') >= settings.replication_batch_sql) or (dv_count_sql_for_ch >= settings.replication_batch_size):
+                                    if (dv_sql_for_execute.count('\n') >= settings.replication_batch_sql) or (
+                                            dv_count_sql_for_ch >= settings.replication_batch_size):
                                         # print('# ***')
                                         dv_sql_list_for_execute = dv_sql_for_execute.splitlines()
                                         with Client(**self.conn_clickhouse_setting) as ch_cursor:
