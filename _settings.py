@@ -11,14 +11,14 @@
 MySQL_matomo_host = '192.168.5.'
 MySQL_matomo_port = 3306
 MySQL_matomo_dbname = 'matomo'
-MySQL_matomo_user = ''
-MySQL_matomo_password = ''
+MySQL_matomo_user = 'user'
+MySQL_matomo_password = 'password'
 #
 CH_matomo_host = '192.168.5.'
 CH_matomo_port = 9000
 CH_matomo_dbname = MySQL_matomo_dbname
-CH_matomo_user = ''
-CH_matomo_password = ''
+CH_matomo_user = 'user'
+CH_matomo_password = 'password'
 #
 #
 #
@@ -81,9 +81,17 @@ replication_tables = [
 ]
 #
 #
+#
+#
+# True - Проверять свободное место на диске, False - не проверять
+CHECK_DISK_SPACE = False
+#
+#
 # TELEGRAM
+# True - отправлять результат в телеграм, False - не отправлять
+SEND_TELEGRAM = False
 # создать бота - получить токен - создать группу - бота сделать администратором - получить id группы
-TLG_BOT_TOKEN = ''
+TLG_BOT_TOKEN = 'token'
 # идентификатор группы можно узнать с помощью бота @username_to_id_bot (регистрируемся, отправляем ссылку на группу, получаем id)
 TLG_CHAT_FOR_SEND = 000
 #

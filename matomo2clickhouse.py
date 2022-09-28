@@ -389,13 +389,29 @@ if __name__ == '__main__':
         dv_for_send_txt_type = 'ERROR'
         dv_for_send_text = f"{ERROR = }"
     finally:
+        try:
+            if settings.CHECK_DISK_SPACE is True:
+                # получаем свободное место на диске ubuntu
+                statvfs = os.statvfs('/')
+                # Size of filesystem in bytes (Размер файловой системы в байтах)
+                dv_statvfs_blocks = round((statvfs.f_frsize * statvfs.f_blocks) / (1024 * 1024 * 1024), 2)
+                # Actual number of free bytes (Фактическое количество свободных байтов)
+                # dv_statvfs_bfree = round((statvfs.f_frsize * statvfs.f_bfree) / (1024 * 1024 * 1024), 2)
+                # Number of free bytes that ordinary users are allowed to use (excl. reserved space)
+                # Количество свободных байтов, которые разрешено использовать обычным пользователям (исключая зарезервированное пространство)
+                dv_statvfs_bavail = round((statvfs.f_frsize * statvfs.f_bavail) / (1024 * 1024 * 1024), 2)
+                # формируем текст о состоянии места на диске
+                dv_for_send_text = f"{dv_for_send_text} | disk sapce all/free: {dv_statvfs_blocks}/{dv_statvfs_bavail} Gb"
+        except:
+            pass
         logger.info(f"{dv_for_send_text}")
         try:
-            settings.f_telegram_send_message(tlg_bot_token=settings.TLG_BOT_TOKEN, tlg_chat_id=settings.TLG_CHAT_FOR_SEND,
-                                             txt_name='matomo2clickhouse',
-                                             txt_type=dv_for_send_txt_type,
-                                             txt_to_send=f"{dv_for_send_text}",
-                                             txt_mode=None)
+            if settings.SEND_TELEGRAM is True:
+                settings.f_telegram_send_message(tlg_bot_token=settings.TLG_BOT_TOKEN, tlg_chat_id=settings.TLG_CHAT_FOR_SEND,
+                                                 txt_name='matomo2clickhouse',
+                                                 txt_type=dv_for_send_txt_type,
+                                                 txt_to_send=f"{dv_for_send_text}",
+                                                 txt_mode=None)
         except:
             pass
         logger.info(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
