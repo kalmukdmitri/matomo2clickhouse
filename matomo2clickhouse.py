@@ -239,11 +239,16 @@ class Binlog2sql(object):
                                 else:
                                     dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
                                     if (dv_sql_for_execute.count('\n') >= settings.replication_batch_sql) or (dv_count_sql_for_ch >= settings.replication_batch_size):
+                                        # print('# ***')
+                                        dv_sql_list_for_execute = dv_sql_for_execute.splitlines()
                                         with Client(**self.conn_clickhouse_setting) as ch_cursor:
-                                            print('# ***')
-                                            print(dv_sql_for_execute)
-                                            ch_cursor.execute(dv_sql_for_execute)
-                                            dv_sql_for_execute = ''
+                                            for dv_sql_line in range(len(dv_sql_list_for_execute)):
+                                                # print(f"{dv_sql_list_for_execute[dv_sql_line] = }")
+                                                # зададим значение dv_sql_for_execute, чтобы в случае ошибки знать на каком именно запросе сломалось
+                                                dv_sql_for_execute = dv_sql_list_for_execute[dv_sql_line]
+                                                # выполняем строку sql
+                                                ch_cursor.execute(dv_sql_list_for_execute[dv_sql_line])
+                                        dv_sql_for_execute = ''
                     #
                     # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
                     if dv_count_sql_for_ch >= settings.replication_batch_size:

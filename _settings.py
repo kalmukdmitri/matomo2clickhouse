@@ -10,15 +10,15 @@
 # подключение к mysql (matomo)
 MySQL_matomo_host = '192.168.5.'
 MySQL_matomo_port = 3306
+MySQL_matomo_dbname = 'matomo'
 MySQL_matomo_user = ''
 MySQL_matomo_password = ''
-MySQL_matomo_dbname = 'matomo'
 #
 CH_matomo_host = '192.168.5.'
 CH_matomo_port = 9000
+CH_matomo_dbname = MySQL_matomo_dbname
 CH_matomo_user = ''
 CH_matomo_password = ''
-CH_matomo_dbname = MySQL_matomo_dbname
 #
 #
 #
@@ -41,10 +41,9 @@ PATH_TO_LOG = '/var/log/matomo2clickhouse/'
 #
 # Какое максимальное количество запросов обрабатывать за один вызов скрипта
 # replication_batch_size - общее количество строк
-replication_batch_size = 10000
-# replication_batch_sql - строк в одном запросе (ВНИМАНИЕ! для построчного = 0)
-# ВНИМАНИЕ!!!!!!!!! НЕ МЕНЯТЬ ЗНАЧЕНИЕ! Пока в разработке!!! Должно быть так: replication_batch_sql = 0
-replication_batch_sql = 0
+replication_batch_size = 50000
+# replication_batch_sql - строк в одном коннекте (ВНИМАНИЕ! для построчного выполнения = 0)
+replication_batch_sql = 2
 #
 # Какое максимальное количество файлов binlog-а обрабатывать за один вызов (если поставить слишком много, то может надолго подвиснуть)
 replication_max_number_files_per_session = 16
