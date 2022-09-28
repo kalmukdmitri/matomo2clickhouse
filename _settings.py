@@ -29,13 +29,13 @@ DEBUG = True
 # создаем папку для логов:
 # sudo mkdir /var/lib/matomo2clickhouse
 # выдаем полные права на папку:
-# sudo chmod 777 /var/log/matomo2clickhouse
+# sudo chmod 777 /var/lib/matomo2clickhouse
 PATH_TO_LIB = '/var/lib/matomo2clickhouse/'
 #
 # создаем папку для переменных данного проекта:
 # sudo mkdir /var/log/matomo2clickhouse
 # выдаем полные права на папку:
-# sudo chmod 777 /var/lib/matomo2clickhouse
+# sudo chmod 777 /var/log/matomo2clickhouse
 PATH_TO_LOG = '/var/log/matomo2clickhouse/'
 #
 #
