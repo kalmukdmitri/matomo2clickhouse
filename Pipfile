@@ -1,0 +1,21 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+jupyter = "*"
+clickhouse-driver = "*"
+ipykernel = "*"
+loguru = "*"
+autopep8 = "*"
+mysqlclient = "*"
+clickhouse-mysql = "*"
+mysql-replication = "*"
+argparse = "*"
+pytelegrambotapi = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.10"
