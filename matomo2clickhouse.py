@@ -401,7 +401,7 @@ if __name__ == '__main__':
                 # Количество свободных байтов, которые разрешено использовать обычным пользователям (исключая зарезервированное пространство)
                 dv_statvfs_bavail = round((statvfs.f_frsize * statvfs.f_bavail) / (1024 * 1024 * 1024), 2)
                 # формируем текст о состоянии места на диске
-                dv_for_send_text = f"{dv_for_send_text} | disk sapce all/free: {dv_statvfs_blocks}/{dv_statvfs_bavail} Gb"
+                dv_for_send_text = f"{dv_for_send_text} | disk space all/free: {dv_statvfs_blocks}/{dv_statvfs_bavail} Gb"
         except:
             pass
         logger.info(f"{dv_for_send_text}")
