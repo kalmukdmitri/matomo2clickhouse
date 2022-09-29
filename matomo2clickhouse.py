@@ -255,6 +255,11 @@ class Binlog2sql(object):
                     if dv_count_sql_for_ch >= settings.replication_batch_size:
                         break
                     #
+                    # если обрабатывали дольше отведенного времени, то прерываем цикл
+                    dv_f_work_munutes = round(int('{:.0f}'.format(1000 * (time.time() - dv_time_begin))) / (1000 * 60))
+                    if dv_f_work_munutes >= settings.replication_max_minutes:
+                        break
+                    #
                     if not (isinstance(binlog_event, RotateEvent) or isinstance(binlog_event, FormatDescriptionEvent)):
                         last_pos = binlog_event.packet.log_pos
                     if flag_last_event:
