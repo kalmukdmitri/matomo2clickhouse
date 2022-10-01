@@ -202,12 +202,13 @@ class Binlog2sql(object):
                     elif is_dml_event(binlog_event) and event_type(binlog_event) in self.sql_type:
                         for row in binlog_event.rows:
                             dv_count_sql_for_ch += 1
-                            sql, log_pos_start, log_pos_end, log_shema, log_table, log_time = concat_sql_from_binlog_event(cursor=cursor,
-                                                                                                                           binlog_event=binlog_event,
-                                                                                                                           no_pk=self.no_pk,
-                                                                                                                           row=row, flashback=self.flashback,
-                                                                                                                           e_start_pos=e_start_pos,
-                                                                                                                           for_clickhouse=self.for_clickhouse)
+                            sql, log_pos_start, log_pos_end, log_shema, log_table, log_time, sql_type = concat_sql_from_binlog_event(cursor=cursor,
+                                                                                                                                     binlog_event=binlog_event,
+                                                                                                                                     no_pk=self.no_pk,
+                                                                                                                                     row=row,
+                                                                                                                                     flashback=self.flashback,
+                                                                                                                                     e_start_pos=e_start_pos,
+                                                                                                                                     for_clickhouse=self.for_clickhouse)
                             if self.for_clickhouse is True:
                                 pass
                             else:
@@ -229,9 +230,9 @@ class Binlog2sql(object):
                                 f_tmp.write(dv_sql_log + '\n')
                             else:
                                 self.log_id += 1
-                                dv_sql_log = "INSERT INTO `%s`.`log_replication` (`id`,`log_time`,`log_file`,`log_pos_start`,`log_pos_end`)" \
-                                             " VALUES (%s,'%s','%s',%s,%s);" \
-                                             % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end))
+                                dv_sql_log = "INSERT INTO `%s`.`log_replication` (`id`,`log_time`,`log_file`,`log_pos_start`,`log_pos_end`,`sql_type`)" \
+                                             " VALUES (%s,'%s','%s',%s,%s,'%s');" \
+                                             % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end), sql_type)
 
                                 logger.debug(f"execute sql to clickhouse | begin")
                                 if settings.replication_batch_sql == 0:

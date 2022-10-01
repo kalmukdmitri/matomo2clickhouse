@@ -5,6 +5,7 @@ CREATE DATABASE IF NOT EXISTS `matomo`;
 CREATE TABLE IF NOT EXISTS `matomo`.`log_replication` (
     `id` UInt64,
     `created_at` DateTime DEFAULT now(),
+    `sql_type` String,
     `log_time` DateTime,
     `log_file` String,
     `log_pos_start` UInt64,
