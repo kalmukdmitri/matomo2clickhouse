@@ -25,7 +25,7 @@ CH_matomo_password = 'password'
 #
 # *** Настройки ***
 # для избыточного логирования True, иначе False
-DEBUG = True
+DEBUG = False
 #
 # создаем папку для логов:
 # sudo mkdir /var/lib/matomo2clickhouse

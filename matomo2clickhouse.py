@@ -34,11 +34,14 @@ from loguru import logger
 # logger.add("log/" + dv_file_name + ".json", level="DEBUG", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8", serialize=True)
 # logger.add("log/" + dv_file_name + ".json", level="WARNING", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8", serialize=True)
 # logger.add("log/" + dv_file_name + ".json", level="INFO", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8", serialize=True)
+logger.remove()  # отключаем логирование в консоль
 if settings.DEBUG is True:
     logger.add(settings.PATH_TO_LOG + dv_file_name + ".log", level="DEBUG", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8")
+    logger.add(sys.stderr, level="DEBUG")
 else:
-    logger.remove()  # отключаем логирование в консоль
-    logger.add(settings.PATH_TO_LOG + dv_file_name + ".log", level="WARNING", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8")
+    logger.add(settings.PATH_TO_LOG + dv_file_name + ".log", level="INFO", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8")
+    logger.add(sys.stderr, level="INFO")
+logger.enable(dv_file_name) # даем имя логированию
 logger.info(f'START')
 logger.info(f'{dv_path_main = }')
 logger.info(f'{dv_file_name = }')
@@ -230,29 +233,30 @@ class Binlog2sql(object):
                                              " VALUES (%s,'%s','%s',%s,%s);" \
                                              % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end))
 
+                                logger.debug(f"execute sql to clickhouse | begin")
                                 if settings.replication_batch_sql == 0:
                                     with Client(**self.conn_clickhouse_setting) as ch_cursor:
                                         dv_sql_for_execute = sql
-                                        # print(dv_sql_for_execute)
+                                        logger.debug(f"{dv_sql_for_execute = }")
                                         ch_cursor.execute(dv_sql_for_execute)
                                         dv_sql_for_execute = dv_sql_log
-                                        # print(dv_sql_for_execute)
+                                        logger.debug(f"{dv_sql_for_execute = }")
                                         ch_cursor.execute(dv_sql_for_execute)
                                         dv_sql_for_execute = ''
                                 else:
                                     dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
                                     if (dv_sql_for_execute.count('\n') >= settings.replication_batch_sql) or (
                                             dv_count_sql_for_ch >= settings.replication_batch_size):
-                                        # print('# ***')
                                         dv_sql_list_for_execute = dv_sql_for_execute.splitlines()
                                         with Client(**self.conn_clickhouse_setting) as ch_cursor:
                                             for dv_sql_line in range(len(dv_sql_list_for_execute)):
-                                                # print(f"{dv_sql_list_for_execute[dv_sql_line] = }")
+                                                logger.debug(f"{dv_sql_list_for_execute[dv_sql_line] = }")
                                                 # зададим значение dv_sql_for_execute, чтобы в случае ошибки знать на каком именно запросе сломалось
                                                 dv_sql_for_execute = dv_sql_list_for_execute[dv_sql_line]
                                                 # выполняем строку sql
                                                 ch_cursor.execute(dv_sql_list_for_execute[dv_sql_line])
                                         dv_sql_for_execute = ''
+                                logger.debug(f"execute sql to clickhouse | end")
                     #
                     # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
                     if dv_count_sql_for_ch >= settings.replication_batch_size:
@@ -342,9 +346,9 @@ if __name__ == '__main__':
             dv_file_lib_open = open(dv_file_lib_path, "r")
             dv_file_lib_time = next(dv_file_lib_open).strip()
             dv_file_lib_open.close()
-            tmp_file = datetime.datetime.strptime(dv_file_lib_time, '%Y-%m-%d %H:%M:%S')
+            dv_file_old_start = datetime.datetime.strptime(dv_file_lib_time, '%Y-%m-%d %H:%M:%S')
             tmp_now = datetime.datetime.strptime(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
-            tmp_seconds = int((tmp_now - tmp_file).total_seconds())
+            tmp_seconds = int((tmp_now - dv_file_old_start).total_seconds())
             if tmp_seconds < 10800:
                 raise Exception(f"Уже выполняется c {dv_file_lib_time} - перед запуском дождитесь завершения предыдущего процесса!")
         else:
