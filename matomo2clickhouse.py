@@ -6,15 +6,15 @@
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 
+import settings
 import os
 import sys
-import settings
 import datetime
 import time
 import pymysql
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
-from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, reversed_lines, is_dml_event, event_type
+from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, reversed_lines, is_dml_event, event_type, get_dateid
 from clickhouse_driver import Client
 #
 #
@@ -51,12 +51,14 @@ logger.info(f'{dv_file_name = }')
 #
 def get_now():
     '''
-    вернет текущую дату и вермя в заданном формате
+    вернет текущую дату и время в заданном формате
     '''
     dv_time_begin = time.time()
     dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S')}"
     # dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S.%f')}"
     return dv_created
+
+
 
 
 class Binlog2sql(object):
@@ -224,24 +226,26 @@ class Binlog2sql(object):
                             # print(f"{log_time = }")
                             if self.flashback:
                                 self.log_id += 1
-                                dv_sql_log = "ALTER TABLE `%s`.`log_replication` DELETE WHERE `id`=%s;" % (log_shema, self.log_id)
+                                dv_sql_log = "ALTER TABLE `%s`.`log_replication` DELETE WHERE `dateid`=%s;" % (log_shema, self.log_id)
                                 # f_tmp.write(dv_sql_log + '\n' + sql + '\n')
                                 # f_tmp.write(sql + '\n')
                                 f_tmp.write(dv_sql_log + '\n')
                             else:
                                 self.log_id += 1
-                                dv_sql_log = "INSERT INTO `%s`.`log_replication` (`id`,`log_time`,`log_file`,`log_pos_start`,`log_pos_end`,`sql_type`)" \
+                                dv_sql_log = "INSERT INTO `%s`.`log_replication` (`dateid`,`log_time`,`log_file`,`log_pos_start`,`log_pos_end`,`sql_type`)" \
                                              " VALUES (%s,'%s','%s',%s,%s,'%s');" \
-                                             % (log_shema, self.log_id, log_time, stream.log_file, int(log_pos_start), int(log_pos_end), sql_type)
+                                             % (log_shema, get_dateid(), log_time, stream.log_file, int(log_pos_start), int(log_pos_end), sql_type)
 
                                 logger.debug(f"execute sql to clickhouse | begin")
                                 if settings.replication_batch_sql == 0:
                                     with Client(**self.conn_clickhouse_setting) as ch_cursor:
                                         dv_sql_for_execute = sql
                                         logger.debug(f"{dv_sql_for_execute = }")
+                                        # выполняем строку sql
                                         ch_cursor.execute(dv_sql_for_execute)
                                         dv_sql_for_execute = dv_sql_log
                                         logger.debug(f"{dv_sql_for_execute = }")
+                                        # выполняем строку sql
                                         ch_cursor.execute(dv_sql_for_execute)
                                         dv_sql_for_execute = ''
                                 else:
@@ -319,13 +323,13 @@ def get_ch_param_for_next(connection_clickhouse_setting):
     # print(f"WW - {is_dml_event(binlog_event) = }")
     try:
         dv_ch_client = Client(**connection_clickhouse_setting)
-        dv_ch_execute = dv_ch_client.execute(f"SELECT max(id) AS id_max FROM {settings.CH_matomo_dbname}.log_replication")
+        dv_ch_execute = dv_ch_client.execute(f"SELECT max(dateid) AS id_max FROM {settings.CH_matomo_dbname}.log_replication")
     except Exception as error:
         raise error
     #
     try:
         log_id_max = dv_ch_execute[0][0]
-        ch_result = dv_ch_client.execute(f"SELECT id, log_time, log_file, log_pos_end FROM {settings.CH_matomo_dbname}.log_replication WHERE id={log_id_max}")
+        ch_result = dv_ch_client.execute(f"SELECT dateid, log_time, log_file, log_pos_end FROM {settings.CH_matomo_dbname}.log_replication WHERE dateid={log_id_max}")
         log_time = f"{ch_result[0][1].strftime('%Y-%m-%d %H:%M:%S')}"
         log_file = f"{ch_result[0][2]}"
         log_pos_end = int(ch_result[0][3])

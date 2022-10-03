@@ -85,7 +85,13 @@ replication_tables = [
     'matomo_tagmanager_variable',
 ]
 #
-#
+# таблицы, в которые все update будем менять на insert
+# ВНИМАНИЕ! в тих таблицах в кликхаусе должно быть поле dateid UInt64
+# чтобы потом корректно с этим работать нужно брать самую свежую запись (максимальное значение поля dateid)
+tables_not_updated = [
+    'matomo_log_visit',
+    'matomo_log_link_visit_action',
+]
 #
 #
 # True - Проверять свободное место на диске, False - не проверять

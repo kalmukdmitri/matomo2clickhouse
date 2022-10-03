@@ -6,12 +6,14 @@
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 
+import settings
 import os
 import sys
 import re
 import copy
 import argparse
 import datetime
+import time
 import getpass
 from contextlib import contextmanager
 from pymysqlreplication.event import QueryEvent
@@ -25,6 +27,19 @@ if sys.version > '3':
     PY3PLUS = True
 else:
     PY3PLUS = False
+
+
+def get_dateid():
+    '''
+    фукция фозвращает псевдоуникальный (скорее всего именно уникальный, т.к. учитывает доли секунд) ключ, основанный на дате:
+    UInt64
+    Пример: 16647739613876690
+    1664773961 - 3876690
+    первые 10 символов - дата и время
+    следующие 7 символов - доли секунды
+    '''
+    dateid = int(round(time.time(), 7) * 10000000)
+    return dateid
 
 
 def re_sub_convert_datetime(matchobj):
@@ -220,17 +235,31 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
         # print(f"{pattern = }")
         sql_type = pattern['sql_type']
         sql = cursor.mogrify(pattern['template'], pattern['values'])
+        # print(f"{sql = }")
         #
         # sql = sql.replace('=NULL', ' is NULL')
         #
-        sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r", \1,", sql)
-        sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r", '\1',", sql)
+        sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r", \1", sql)
+        sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r", '\1'", sql)
         #
-        sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r"`=\1,", sql)
-        sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r"`='\1',", sql)
+        sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r"`=\1", sql)
+        sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r"`='\1'", sql)
         #
-        sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})' AND", r"`=\1 AND", sql)
-        sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}) AND", r"`='\1' AND", sql)
+        sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])' AND", r"`=\1 AND", sql)
+        sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9]) AND", r"`='\1' AND", sql)
+        #
+        # было до 221003:
+        # sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r", \1,", sql)
+        # sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r", '\1',", sql)
+        # #
+        # sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r"`=\1,", sql)
+        # sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r"`='\1',", sql)
+        # #
+        # sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})' AND", r"`=\1 AND", sql)
+        # sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}) AND", r"`='\1' AND", sql)
+        #
+        #
+        #
         #
         # sql = sql.replace("`location_latitude`=", "`location_latitude`='")
         # sql = sql.replace(" AND `location_longitude`=", "' AND `location_longitude`='")
@@ -304,6 +333,9 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
     else:
         if isinstance(binlog_event, WriteRowsEvent):
             sql_type = 'INSERT'
+            # print(f"{row['values'].keys() = }")
+            # print(f"{row['values'].values() = }")
+            # print(f"{row['values'] = }")
             if no_pk:
                 # print binlog_event.__dict__
                 # tableInfo = (binlog_event.table_map)[binlog_event.table_id]
@@ -312,6 +344,9 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                 if binlog_event.primary_key:
                     row['values'].pop(binlog_event.primary_key)
             if for_clickhouse is True:
+                if binlog_event.table in settings.tables_not_updated:
+                    # добавляем поле dateid
+                    row['values']['dateid'] = get_dateid()
                 template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
                     binlog_event.schema, binlog_event.table,
                     ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
@@ -324,6 +359,8 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                     ', '.join(['%s'] * len(row['values']))
                 )
             values = map(fix_object, row['values'].values())
+            # print(f"{row['values'].values() = }")
+            # print(f"{values = }")
         elif isinstance(binlog_event, DeleteRowsEvent):
             sql_type = 'DELETE'
             if for_clickhouse is True:
@@ -336,24 +373,43 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
         elif isinstance(binlog_event, UpdateRowsEvent):
             sql_type = 'UPDATE'
             if for_clickhouse is True:
-                # если новое значение=старому, то обновлять его не будем.
-                # ВНИМАНИЕ! это необходимо для того, чтобы первичные ключи не ругались (их нельзя обновлять!)
-                for dv_key_name, dv_key_value in list(row['after_values'].items()):
-                    if row['after_values'][dv_key_name] == row['before_values'][dv_key_name]:
-                        del row['after_values'][dv_key_name]
-                        pass
-                template = 'ALTER TABLE `{0}`.`{1}` UPDATE {2} WHERE {3};'.format(
-                    binlog_event.schema, binlog_event.table,
-                    ', '.join(['`%s`=%%s' % k for k in row['after_values'].keys()]),
-                    ' AND '.join(['`%s`=%%s' % k for k in row['before_values'].keys()])
-                )
+                # UPDATE в clickhouse работает ОЧЕНЬ МЕДЛЕННО, поэтому в больших таблицах с частыми UPDATE заменяем INSERT
+                # ВНИМАНИЕ!!! это важно учитывать когда будем делать селекты
+                # чтобы потом корректно с этим работать нужно брать самую свежую запись (максимальное значение поля dateid)
+                if binlog_event.table in settings.tables_not_updated:
+                    # добавляем поле dateid
+                    row['after_values']['dateid'] = get_dateid()
+                    sql_type = 'INS-UPD'
+                    # print(f"{row['after_values'].keys() = }")
+                    # print(f"{row['after_values'].values() = }")
+                    template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
+                        binlog_event.schema, binlog_event.table,
+                        ', '.join(map(lambda key: '`%s`' % key, row['after_values'].keys())),
+                        ', '.join(['%s'] * len(row['after_values']))
+                    )
+                    values = map(fix_object, row['after_values'].values())
+                    # print(f"{row['after_values'].values() = }")
+                else:
+                    # для остальных таблиц оставляем UPDATE
+                    # если новое значение=старому, то обновлять его не будем.
+                    # ВНИМАНИЕ! это необходимо для того, чтобы первичные ключи не ругались (их нельзя обновлять!)
+                    for dv_key_name, dv_key_value in list(row['after_values'].items()):
+                        if row['after_values'][dv_key_name] == row['before_values'][dv_key_name]:
+                            del row['after_values'][dv_key_name]
+                            pass
+                    template = 'ALTER TABLE `{0}`.`{1}` UPDATE {2} WHERE {3};'.format(
+                        binlog_event.schema, binlog_event.table,
+                        ', '.join(['`%s`=%%s' % k for k in row['after_values'].keys()]),
+                        ' AND '.join(['`%s`=%%s' % k for k in row['before_values'].keys()])
+                    )
+                    values = map(fix_object, list(row['after_values'].values()) + list(row['before_values'].values()))
             else:
                 template = 'UPDATE `{0}`.`{1}` SET {2} WHERE {3} LIMIT 1;'.format(
                     binlog_event.schema, binlog_event.table,
                     ', '.join(['`%s`=%%s' % k for k in row['after_values'].keys()]),
                     ' AND '.join(map(compare_items, row['before_values'].items()))
                 )
-            values = map(fix_object, list(row['after_values'].values()) + list(row['before_values'].values()))
+                values = map(fix_object, list(row['after_values'].values()) + list(row['before_values'].values()))
     return {'sql_type': sql_type, 'template': template, 'values': list(values)}
 
 

@@ -3,7 +3,7 @@ DROP DATABASE `matomo`;
 CREATE DATABASE IF NOT EXISTS `matomo`;
 
 CREATE TABLE IF NOT EXISTS `matomo`.`log_replication` (
-    `id` UInt64,
+    `dateid` UInt64,
     `created_at` DateTime DEFAULT now(),
     `sql_type` String,
     `log_time` DateTime,
@@ -11,9 +11,10 @@ CREATE TABLE IF NOT EXISTS `matomo`.`log_replication` (
     `log_pos_start` UInt64,
     `log_pos_end` UInt64
 )
-ENGINE = ReplacingMergeTree() ORDER BY (id) SETTINGS index_granularity = 8192;
+ENGINE = ReplacingMergeTree() ORDER BY (dateid) SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_visit`  (
+    `dateid` UInt64,
     `idvisit` UInt64,
     `idsite` UInt32,
     `idvisitor` String,
@@ -92,10 +93,11 @@ CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_visit`  (
     `custom_var_v4` Nullable(String),
     `custom_var_k5` Nullable(String),
     `custom_var_v5` Nullable(String)
-) 
-ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(visit_first_action_time) ORDER BY (idvisit);
+)
+ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(visit_first_action_time) ORDER BY (idvisit, dateid);
 
 CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_link_visit_action`  (
+    `dateid` UInt64,
     `idlink_va` UInt64,
     `idsite` UInt32,
     `idvisitor` String,
@@ -148,8 +150,8 @@ CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_link_visit_action`  (
     `custom_var_v4` Nullable(String),
     `custom_var_k5` Nullable(String),
     `custom_var_v5` Nullable(String)
-) 
-ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(server_time) ORDER BY (idlink_va);
+)
+ENGINE = ReplacingMergeTree() PARTITION BY toYYYYMM(server_time) ORDER BY (idlink_va, dateid);
 
 CREATE TABLE IF NOT EXISTS `matomo`.`matomo_log_conversion_item`  (
     `idsite` UInt32,
