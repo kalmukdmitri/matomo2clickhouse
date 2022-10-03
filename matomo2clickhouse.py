@@ -42,7 +42,8 @@ else:
     logger.add(settings.PATH_TO_LOG + dv_file_name + ".log", level="INFO", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8")
     logger.add(sys.stderr, level="INFO")
 logger.enable(dv_file_name) # даем имя логированию
-logger.info(f'START')
+logger.info(f'***')
+logger.info(f'BEGIN')
 logger.info(f'{dv_path_main = }')
 logger.info(f'{dv_file_name = }')
 
