@@ -31,7 +31,7 @@ Replication Matomo from MySQL to ClickHouse (Репликация Matomo: пер
 default-authentication-plugin = mysql_native_password
 server_id = 1
 log_bin = /var/log/mysql/mysql-bin.log
-max_binlog_size = 100M
+max_binlog_size = 50M
 expire_logs_days = 30
 binlog_format = row
 binlog_row_image = full
@@ -115,6 +115,7 @@ cp utf_8.py utf8mb3.py
 ```
 
 ### ВНИМАНИЕ!
-- в переменной ```settings.tables_not_updated``` указаны таблицы, для которых все UPDATE заменены на INSERT, т.е. записи добавляются, а не изменяются. Это необходимо учитывать при селектах! Актуальные записи - те, у которых максимальное значение ```dateid```.
+- В переменной ```settings.tables_not_updated``` указаны таблицы, для которых все UPDATE заменены на INSERT, т.е. записи добавляются, а не изменяются. Это необходимо учитывать при селектах! Актуальные записи - те, у которых максимальное значение ```dateid```.
 Сделано это для того, чтобы ClickHouse работал корректно (он не заточен на UPDATE - это ОЧЕНЬ медленная операция)
+- Для примера (как получать актуальные данные) созданы 2 представления: ```view_matomo_log_visit``` и```view_matomo_log_link_visit_action```
 

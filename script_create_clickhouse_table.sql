@@ -396,3 +396,169 @@ CREATE TABLE IF NOT EXISTS `matomo`.`matomo_custom_dimensions`  (
     `case_sensitive` UInt8
 ) 
 ENGINE = ReplacingMergeTree() ORDER BY (idcustomdimension,idsite);
+
+
+
+CREATE VIEW `matomo`.`view_matomo_log_visit`
+(
+    `dateid` UInt64,
+    `idvisit` UInt64,
+    `idsite` UInt32,
+    `idvisitor` String,
+    `visit_last_action_time` DateTime,
+    `config_id` String,
+    `location_ip` String,
+    `profilable` Nullable(Int8),
+    `user_id` Nullable(String),
+    `visit_first_action_time` DateTime,
+    `visit_goal_buyer` Nullable(Int8),
+    `visit_goal_converted` Nullable(Int8),
+    `visitor_returning` Nullable(Int8),
+    `visitor_seconds_since_first` Nullable(UInt32),
+    `visitor_seconds_since_order` Nullable(UInt32),
+    `visitor_count_visits` UInt32,
+    `visit_entry_idaction_name` Nullable(UInt32),
+    `visit_entry_idaction_url` Nullable(UInt32),
+    `visit_exit_idaction_name` Nullable(UInt32),
+    `visit_exit_idaction_url` Nullable(UInt32),
+    `visit_total_actions` Nullable(UInt32),
+    `visit_total_interactions` Nullable(UInt32),
+    `visit_total_searches` Nullable(UInt16),
+    `referer_keyword` Nullable(String),
+    `referer_name` Nullable(String),
+    `referer_type` Nullable(UInt8),
+    `referer_url` Nullable(String),
+    `location_browser_lang` Nullable(String),
+    `config_browser_engine` Nullable(String),
+    `config_browser_name` Nullable(String),
+    `config_browser_version` Nullable(String),
+    `config_client_type` Nullable(Int8),
+    `config_device_brand` Nullable(String),
+    `config_device_model` Nullable(String),
+    `config_device_type` Nullable(Int8),
+    `config_os` Nullable(String),
+    `config_os_version` Nullable(String),
+    `visit_total_events` Nullable(UInt32),
+    `visitor_localtime` Nullable(String),
+    `visitor_seconds_since_last` Nullable(UInt32),
+    `config_resolution` Nullable(String),
+    `config_cookie` Nullable(Int8),
+    `config_flash` Nullable(Int8),
+    `config_java` Nullable(Int8),
+    `config_pdf` Nullable(Int8),
+    `config_quicktime` Nullable(Int8),
+    `config_realplayer` Nullable(Int8),
+    `config_silverlight` Nullable(Int8),
+    `config_windowsmedia` Nullable(Int8),
+    `visit_total_time` UInt32,
+    `location_city` Nullable(String),
+    `location_country` Nullable(String),
+    `location_latitude` Nullable(String),
+    `location_longitude` Nullable(String),
+    `location_region` Nullable(String),
+    `last_idlink_va` Nullable(UInt64),
+    `custom_dimension_1` Nullable(String),
+    `custom_dimension_2` Nullable(String),
+    `custom_dimension_3` Nullable(String),
+    `custom_dimension_4` Nullable(String),
+    `custom_dimension_5` Nullable(String),
+    `campaign_content` Nullable(String),
+    `campaign_group` Nullable(String),
+    `campaign_id` Nullable(String),
+    `campaign_keyword` Nullable(String),
+    `campaign_medium` Nullable(String),
+    `campaign_name` Nullable(String),
+    `campaign_placement` Nullable(String),
+    `campaign_source` Nullable(String),
+    `custom_var_k1` Nullable(String),
+    `custom_var_v1` Nullable(String),
+    `custom_var_k2` Nullable(String),
+    `custom_var_v2` Nullable(String),
+    `custom_var_k3` Nullable(String),
+    `custom_var_v3` Nullable(String),
+    `custom_var_k4` Nullable(String),
+    `custom_var_v4` Nullable(String),
+    `custom_var_k5` Nullable(String),
+    `custom_var_v5` Nullable(String)
+) AS
+SELECT t3.*
+FROM
+(
+    SELECT
+        t1.idvisit AS idvisit_src,
+
+        max(t1.dateid) AS dateid_max
+    FROM `matomo`.`matomo_log_visit` AS t1
+    GROUP BY t1.idvisit
+) AS t2
+LEFT JOIN `matomo`.`matomo_log_visit` AS t3 ON (t3.idvisit = t2.idvisit_src) AND (t3.dateid = t2.dateid_max);
+
+
+CREATE VIEW `matomo`.`view_matomo_log_link_visit_action`
+(
+    `dateid` UInt64,
+    `idlink_va` UInt64,
+    `idsite` UInt32,
+    `idvisitor` String,
+    `idvisit` UInt64,
+    `idaction_url_ref` Nullable(UInt32),
+    `idaction_name_ref` Nullable(UInt32),
+    `custom_float` Nullable(String),
+    `pageview_position` Nullable(UInt32),
+    `server_time` DateTime,
+    `idpageview` Nullable(String),
+    `idaction_name` Nullable(UInt32),
+    `idaction_url` Nullable(UInt32),
+    `search_cat` Nullable(String),
+    `search_count` Nullable(UInt32),
+    `time_spent_ref_action` Nullable(UInt32),
+    `idaction_product_cat` Nullable(UInt32),
+    `idaction_product_cat2` Nullable(UInt32),
+    `idaction_product_cat3` Nullable(UInt32),
+    `idaction_product_cat4` Nullable(UInt32),
+    `idaction_product_cat5` Nullable(UInt32),
+    `idaction_product_name` Nullable(UInt32),
+    `product_price` Nullable(String),
+    `idaction_product_sku` Nullable(UInt32),
+    `idaction_event_action` Nullable(UInt32),
+    `idaction_event_category` Nullable(UInt32),
+    `idaction_content_interaction` Nullable(UInt32),
+    `idaction_content_name` Nullable(UInt32),
+    `idaction_content_piece` Nullable(UInt32),
+    `idaction_content_target` Nullable(UInt32),
+    `time_dom_completion` Nullable(UInt32),
+    `time_dom_processing` Nullable(UInt32),
+    `time_network` Nullable(UInt32),
+    `time_on_load` Nullable(UInt32),
+    `time_server` Nullable(UInt32),
+    `time_transfer` Nullable(UInt32),
+    `time_spent` Nullable(UInt32),
+    `custom_dimension_1` Nullable(String),
+    `custom_dimension_2` Nullable(String),
+    `custom_dimension_3` Nullable(String),
+    `custom_dimension_4` Nullable(String),
+    `custom_dimension_5` Nullable(String),
+    `bandwidth` Nullable(UInt64),
+    `custom_var_k1` Nullable(String),
+    `custom_var_v1` Nullable(String),
+    `custom_var_k2` Nullable(String),
+    `custom_var_v2` Nullable(String),
+    `custom_var_k3` Nullable(String),
+    `custom_var_v3` Nullable(String),
+    `custom_var_k4` Nullable(String),
+    `custom_var_v4` Nullable(String),
+    `custom_var_k5` Nullable(String),
+    `custom_var_v5` Nullable(String)
+) AS
+SELECT t3.*
+FROM
+(
+    SELECT
+        t1.idvisit AS idvisit_src,
+
+        max(t1.dateid) AS dateid_max
+    FROM `matomo`.`matomo_log_link_visit_action` AS t1
+    GROUP BY t1.idvisit
+) AS t2
+LEFT JOIN `matomo`.`matomo_log_link_visit_action` AS t3 ON (t3.idvisit = t2.idvisit_src) AND (t3.dateid = t2.dateid_max);
+
