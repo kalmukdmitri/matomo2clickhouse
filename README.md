@@ -113,8 +113,12 @@ binlog_do_db = название базы, (можно несколько стр�
 cd /usr/lib/python3.10/encodings
 cp utf_8.py utf8mb3.py
 ```
-- При ошибке ```'utf-8' codec can't decode bytes in position 790-791: unexpected end of data``` помогло добавление параметра errors="ignore" в .venv/lib/python3.10/site-packages/pymysqlreplication/events.py строка 203 в параметр .decode("utf-8", errors="ignore"):
+- При ошибке ```'utf-8' codec can't decode bytes in position 790-791: unexpected end of data```
+помогло добавление параметра ```errors="ignore"```
+в ```.venv/lib/python3.10/site-packages/pymysqlreplication/events.py```
+строка 203 в параметр ```.decode("utf-8", errors="ignore")```:
 ```self.query = self.packet.read(event_size - 13 - self.status_vars_length - self.schema_length - 1).decode("utf-8", errors="ignore")```
+
 
 ### ВНИМАНИЕ!
 - В переменной ```settings.tables_not_updated``` указаны таблицы, для которых все UPDATE заменены на INSERT, т.е. записи добавляются, а не изменяются. Это необходимо учитывать при селектах! Актуальные записи - те, у которых максимальное значение ```dateid```.
