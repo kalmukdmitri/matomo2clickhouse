@@ -31,7 +31,7 @@ Replication Matomo from MySQL to ClickHouse (Репликация Matomo: пер
 default-authentication-plugin = mysql_native_password
 server_id = 1
 log_bin = /var/log/mysql/mysql-bin.log
-max_binlog_size = 50M
+max_binlog_size = 100M
 expire_logs_days = 30
 binlog_format = row
 binlog_row_image = full
@@ -107,12 +107,14 @@ binlog_do_db = название базы, (можно несколько стр�
 ВНИМАНИЕ!!! отредактируйте содержимое файла matomo2clickhouse_cron.sh и сделайте его исполняемым
 
 
-### Частые проблемы
+### Возможные проблемы и их решение
 - Всё установили и запускам, но получаем ошибку ```unknown encoding: utf8mb3```, скорее всего можно починить примерно так:
 ```
 cd /usr/lib/python3.10/encodings
 cp utf_8.py utf8mb3.py
 ```
+- При ошибке ```'utf-8' codec can't decode bytes in position 790-791: unexpected end of data``` помогло добавление параметра errors="ignore" в .venv/lib/python3.10/site-packages/pymysqlreplication/events.py строка 203 в параметр .decode("utf-8", errors="ignore"):
+```self.query = self.packet.read(event_size - 13 - self.status_vars_length - self.schema_length - 1).decode("utf-8", errors="ignore")```
 
 ### ВНИМАНИЕ!
 - В переменной ```settings.tables_not_updated``` указаны таблицы, для которых все UPDATE заменены на INSERT, т.е. записи добавляются, а не изменяются. Это необходимо учитывать при селектах! Актуальные записи - те, у которых максимальное значение ```dateid```.

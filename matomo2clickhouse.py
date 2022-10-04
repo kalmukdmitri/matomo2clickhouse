@@ -156,8 +156,9 @@ class Binlog2sql(object):
         try:
             stream = BinLogStreamReader(connection_settings=self.conn_mysql_setting, server_id=self.server_id,
                                         log_file=self.start_file, log_pos=self.start_pos, only_schemas=self.only_schemas,
-                                        only_tables=self.only_tables, resume_stream=True, blocking=True)
-
+                                        only_tables=self.only_tables, resume_stream=True, blocking=True,
+                                        is_mariadb=False, freeze_schema=True)
+            # , ignored_events = 'CREATE'
             flag_last_event = False
             dv_sql_for_execute = ''
             if self.flashback:
@@ -282,7 +283,7 @@ class Binlog2sql(object):
                 f_tmp.close()
                 if self.flashback:
                     self.print_rollback_sql(filename=tmp_file)
-
+        #
         except Exception as ERROR:
             f_status = 'ERROR'
             if dv_sql_for_execute != '':
@@ -298,7 +299,7 @@ class Binlog2sql(object):
 
     def print_rollback_sql(self, filename):
         """print rollback sql from tmp_file"""
-        with open(filename, "rb") as f_tmp:
+        with open(filename, mode="rb", encoding='utf-8') as f_tmp:
             batch_size = 1000
             i = 0
             for line in reversed_lines(f_tmp):
@@ -349,7 +350,7 @@ if __name__ == '__main__':
     try:
         dv_file_lib_path = f"{settings.PATH_TO_LIB}/matomo2clickhouse.dat"
         if os.path.exists(dv_file_lib_path):
-            dv_file_lib_open = open(dv_file_lib_path, "r")
+            dv_file_lib_open = open(dv_file_lib_path, mode="r", encoding='utf-8')
             dv_file_lib_time = next(dv_file_lib_open).strip()
             dv_file_lib_open.close()
             dv_file_old_start = datetime.datetime.strptime(dv_file_lib_time, '%Y-%m-%d %H:%M:%S')
@@ -358,7 +359,7 @@ if __name__ == '__main__':
             if tmp_seconds < 10800:
                 raise Exception(f"Уже выполняется c {dv_file_lib_time} - перед запуском дождитесь завершения предыдущего процесса!")
         else:
-            dv_file_lib_open = open(dv_file_lib_path, "w")
+            dv_file_lib_open = open(dv_file_lib_path, mode="w", encoding='utf-8')
             dv_file_lib_time = f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')}"
             dv_file_lib_open.write(f"{dv_file_lib_time}")
             dv_file_lib_open.close()

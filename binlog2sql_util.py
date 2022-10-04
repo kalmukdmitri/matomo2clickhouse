@@ -46,6 +46,7 @@ def re_sub_convert_datetime(matchobj):
     out_txt = f"{matchobj.group(2).zfill(4)}-{matchobj.group(3).zfill(2)}-{matchobj.group(4).zfill(2)} {matchobj.group(5).zfill(2)}:{matchobj.group(6).zfill(2)}:{matchobj.group(6).zfill(2)}"
     return out_txt
 
+
 def is_valid_datetime(string):
     try:
         datetime.datetime.strptime(string, "%Y-%m-%d %H:%M:%S")
@@ -68,7 +69,7 @@ def create_unique_file(filename):
 
 @contextmanager
 def temp_open(filename, mode):
-    f = open(filename, mode)
+    f = open(filename, mode, encoding='utf-8')
     try:
         yield f
     finally:
@@ -138,7 +139,7 @@ def command_line_args(args):
         parser.print_help()
         sys.exit(1)
     if not args.start_file:
-        args.start_file=''
+        args.start_file = ''
     # if not args.start_file:
     #     raise ValueError('Lack of parameter: start_file')
     if args.flashback and args.stop_never:
@@ -172,26 +173,9 @@ def fix_object(value):
         if type(value) is bytes:
             value = value.hex()
         else:
+            # value = value.decode('utf-8', 'backslashreplace')
+            # value = value.decode('utf-8', 'ignore')
             value = value.decode('utf-8')
-        # try:
-        #     print(f"")
-        #     print(f"*-*")
-        #     print(f"{value = }")
-        #     print(f"{type(value) = }")
-        #     value = value.decode('utf-8')
-        #     value = re.sub(r"Decimal\('([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})'\)", r"'\1'", value)
-        #     print(f"{value = }")
-        #     print(f"*-*")
-        #     print(f"")
-        # except:
-        #     print(f"")
-        #     print(f"*-EEE-*")
-        #     print(f"{type(value) = }")
-        #     print(f"{value = }")
-        #     value = value.hex()
-        #     print(f"{value = }")
-        #     print(f"*-EEE-*")
-        #     print(f"")
         return value
     elif not PY3PLUS and isinstance(value, unicode):
         return value.encode('utf-8')
@@ -215,6 +199,7 @@ def event_type(event):
     elif isinstance(event, DeleteRowsEvent):
         t = 'DELETE'
     return t
+
 
 
 def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False, for_clickhouse=False):
@@ -248,22 +233,6 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
         sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])' AND", r"`=\1 AND", sql)
         sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9]) AND", r"`='\1' AND", sql)
         #
-        # было до 221003:
-        # sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r", \1,", sql)
-        # sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r", '\1',", sql)
-        # #
-        # sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})',", r"`=\1,", sql)
-        # sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}),", r"`='\1',", sql)
-        # #
-        # sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16})' AND", r"`=\1 AND", sql)
-        # sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}) AND", r"`='\1' AND", sql)
-        #
-        #
-        #
-        #
-        # sql = sql.replace("`location_latitude`=", "`location_latitude`='")
-        # sql = sql.replace(" AND `location_longitude`=", "' AND `location_longitude`='")
-        # sql = sql.replace(" AND `location_region`", "' AND `location_region`")
         time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
         if for_clickhouse is True:
             pass
@@ -279,7 +248,6 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
             if binlog_event.schema:
                 sql = 'USE {0};\n'.format(binlog_event.schema)
             sql += '{0};'.format(fix_object(binlog_event.query))
-
 
     return sql, log_pos_start, log_pos_end, binlog_event.schema, binlog_event.table, time, sql_type
 
@@ -418,7 +386,9 @@ def reversed_lines(fin):
     part = ''
     for block in reversed_blocks(fin):
         if PY3PLUS:
-            block = block.decode("utf-8")
+            # block = block.decode('utf-8', 'backslashreplace')
+            # block = block.decode('utf-8', 'ignore')
+            block = block.decode('utf-8')
         for c in reversed(block):
             if c == '\n' and part:
                 yield part[::-1]
