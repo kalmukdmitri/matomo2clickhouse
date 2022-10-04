@@ -158,6 +158,7 @@ class Binlog2sql(object):
                 tmp_sql_execute = f"PURGE BINARY LOGS BEFORE DATE(NOW() - INTERVAL {settings.LEAVE_BINARY_LOGS_IN_DAYS} DAY) + INTERVAL 0 SECOND"
                 # print(f"{tmp_sql_execute = }")
                 cursor.execute(tmp_sql_execute)
+                logger.info(f"{tmp_sql_execute}")
 
     def process_binlog(self):
         dv_time_begin = time.time()
@@ -304,7 +305,7 @@ class Binlog2sql(object):
         else:
             work_time_ms = f"{'{:.0f}'.format(1000 * (time.time() - dv_time_begin))}"
             f_status = 'SUCCESS'
-            f_text = f"{f_status} = Успешно обработано {dv_count_sql_for_ch} строк за {work_time_ms} мс."
+            f_text = f"{f_status} = Успешно обработано {dv_count_sql_for_ch} строк за {work_time_ms} мс. | max_log_time = {log_time}"
 
         return f_status, f_text
 
