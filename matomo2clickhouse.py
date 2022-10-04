@@ -41,7 +41,7 @@ if settings.DEBUG is True:
 else:
     logger.add(settings.PATH_TO_LOG + dv_file_name + ".log", level="INFO", rotation="00:00", retention='30 days', compression="gz", encoding="utf-8")
     logger.add(sys.stderr, level="INFO")
-logger.enable(dv_file_name) # даем имя логированию
+logger.enable(dv_file_name)  # даем имя логированию
 logger.info(f'***')
 logger.info(f'BEGIN')
 logger.info(f'{dv_path_main = }')
@@ -58,8 +58,6 @@ def get_now():
     dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S')}"
     # dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S.%f')}"
     return dv_created
-
-
 
 
 class Binlog2sql(object):
@@ -150,6 +148,17 @@ class Binlog2sql(object):
             # print(f'{self.eof_pos = }')
             # print(f'{self.binlogList = }')
 
+    def clear_binlog(self, log_time):
+        # print(f"{log_time = }")
+        tmp_LEAVE_BINARY_LOGS_IN_DAYS = datetime.datetime.today() - datetime.timedelta(days=settings.LEAVE_BINARY_LOGS_IN_DAYS)
+        # print(f"{tmp_LEAVE_BINARY_LOGS_IN_DAYS = }")
+        if log_time > tmp_LEAVE_BINARY_LOGS_IN_DAYS:
+            self.connection = pymysql.connect(**self.conn_mysql_setting)
+            with self.connection.cursor() as cursor:
+                tmp_sql_execute = f"PURGE BINARY LOGS BEFORE DATE(NOW() - INTERVAL {settings.LEAVE_BINARY_LOGS_IN_DAYS} DAY) + INTERVAL 0 SECOND"
+                # print(f"{tmp_sql_execute = }")
+                cursor.execute(tmp_sql_execute)
+
     def process_binlog(self):
         dv_time_begin = time.time()
         dv_count_sql_for_ch = 0
@@ -158,7 +167,6 @@ class Binlog2sql(object):
                                         log_file=self.start_file, log_pos=self.start_pos, only_schemas=self.only_schemas,
                                         only_tables=self.only_tables, resume_stream=True, blocking=True,
                                         is_mariadb=False, freeze_schema=True)
-            # , ignored_events = 'CREATE'
             flag_last_event = False
             dv_sql_for_execute = ''
             if self.flashback:
@@ -283,6 +291,9 @@ class Binlog2sql(object):
                 f_tmp.close()
                 if self.flashback:
                     self.print_rollback_sql(filename=tmp_file)
+                #
+                # чистим старые логи
+                self.clear_binlog(log_time=log_time)
         #
         except Exception as ERROR:
             f_status = 'ERROR'
@@ -331,7 +342,8 @@ def get_ch_param_for_next(connection_clickhouse_setting):
     #
     try:
         log_id_max = dv_ch_execute[0][0]
-        ch_result = dv_ch_client.execute(f"SELECT dateid, log_time, log_file, log_pos_end FROM {settings.CH_matomo_dbname}.log_replication WHERE dateid={log_id_max}")
+        ch_result = dv_ch_client.execute(
+            f"SELECT dateid, log_time, log_file, log_pos_end FROM {settings.CH_matomo_dbname}.log_replication WHERE dateid={log_id_max}")
         log_time = f"{ch_result[0][1].strftime('%Y-%m-%d %H:%M:%S')}"
         log_file = f"{ch_result[0][2]}"
         log_pos_end = int(ch_result[0][3])

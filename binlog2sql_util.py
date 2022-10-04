@@ -201,7 +201,6 @@ def event_type(event):
     return t
 
 
-
 def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False, for_clickhouse=False):
     if flashback and no_pk:
         raise ValueError('only one of flashback or no_pk can be True')
