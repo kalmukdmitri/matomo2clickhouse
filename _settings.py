@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # matomo2clickhouse
 # https://github.com/dneupokoev/matomo2clickhouse
-# 220929
+# 221004
 #
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
@@ -54,7 +54,7 @@ replication_max_number_files_per_session = 20
 replication_max_minutes = 100
 #
 #
-# LEAVE_BINARY_LOGS_IN_DAYS - оставляем бинарные логи за Х предыдущих дней
+# LEAVE_BINARY_LOGS_IN_DAYS - оставляем бинарные логи за предыдущие Х дней
 # ВНИМАНИЕ! логи чистятся только если последняя точка репликации позже, чем точка в логах для удаления NOW-точка > LEAVE_BINARY_LOGS_IN_DAYS
 LEAVE_BINARY_LOGS_IN_DAYS = 7
 # sql: PURGE BINARY LOGS BEFORE DATE(NOW() - INTERVAL 30 DAY) + INTERVAL 0 SECOND;
