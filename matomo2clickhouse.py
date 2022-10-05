@@ -12,6 +12,7 @@ import sys
 import datetime
 import time
 import pymysql
+import configparser
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
 from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, reversed_lines, is_dml_event, event_type, get_dateid
@@ -58,6 +59,16 @@ def get_now():
     dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S')}"
     # dv_created = f"{datetime.datetime.fromtimestamp(dv_time_begin).strftime('%Y-%m-%d %H:%M:%S.%f')}"
     return dv_created
+
+
+def get_second_between_now_and_datetime(in_datetime_str='2000-01-01 00:00:00'):
+    '''
+    вернет количество секунд между текущим временем и полученной датой-временем в формате '%Y-%m-%d %H:%M:%S'
+    '''
+    tmp_datetime_sart = datetime.datetime.strptime(in_datetime_str, '%Y-%m-%d %H:%M:%S')
+    tmp_now = datetime.datetime.strptime(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+    tmp_seconds = int((tmp_now - tmp_datetime_sart).total_seconds())
+    return tmp_seconds
 
 
 class Binlog2sql(object):
@@ -359,6 +370,17 @@ if __name__ == '__main__':
     logger.info(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
     dv_for_send_txt_type = ''
     dv_for_send_text = ''
+    try:
+        # читаем значения из конфига
+        dv_lib_path_ini = f"{settings.PATH_TO_LIB}/matomo2clickhouse.cfg"
+        dv_cfg = configparser.ConfigParser()
+        if os.path.exists(dv_lib_path_ini):
+            with open(dv_lib_path_ini, mode="r", encoding='utf-8') as fp:
+                dv_cfg.read_file(fp)
+        # читаем значения
+        dv_cfg_last_send_tlg_success = dv_cfg.get('DEFAULT', 'last_send_tlg_success', fallback='2000-01-01 00:00:00')
+    except:
+        pass
     #
     try:
         dv_file_lib_path = f"{settings.PATH_TO_LIB}/matomo2clickhouse.dat"
@@ -369,7 +391,7 @@ if __name__ == '__main__':
             dv_file_old_start = datetime.datetime.strptime(dv_file_lib_time, '%Y-%m-%d %H:%M:%S')
             tmp_now = datetime.datetime.strptime(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
             tmp_seconds = int((tmp_now - dv_file_old_start).total_seconds())
-            if tmp_seconds < 10800:
+            if tmp_seconds < settings.replication_max_minutes * 2 * 60:
                 raise Exception(f"Уже выполняется c {dv_file_lib_time} - перед запуском дождитесь завершения предыдущего процесса!")
         else:
             dv_file_lib_open = open(dv_file_lib_path, mode="w", encoding='utf-8')
@@ -440,11 +462,37 @@ if __name__ == '__main__':
         logger.info(f"{dv_for_send_text}")
         try:
             if settings.SEND_TELEGRAM is True:
-                settings.f_telegram_send_message(tlg_bot_token=settings.TLG_BOT_TOKEN, tlg_chat_id=settings.TLG_CHAT_FOR_SEND,
-                                                 txt_name='matomo2clickhouse',
-                                                 txt_type=dv_for_send_txt_type,
-                                                 txt_to_send=f"{dv_for_send_text}",
-                                                 txt_mode=None)
+                if dv_for_send_txt_type == 'ERROR':
+                    # если отработало с ошибкой, то в телеграм оправляем ошибку ВСЕГДА! хоть каждую минуту - это ен спам
+                    dv_is_SEND_TELEGRAM_success = True
+                else:
+                    dv_is_SEND_TELEGRAM_success = False
+                    # Чтобы слишком часто не спамить в телеграм сначала проверим разрешено ли именно сейчас отправлять сообщение
+                    try:
+                        # проверяем нужно ли отправлять успех в телеграм
+                        if get_second_between_now_and_datetime(dv_cfg_last_send_tlg_success) > settings.SEND_SUCCESS_REPEATED_NOT_EARLIER_THAN_MINUTES * 60:
+                            dv_is_SEND_TELEGRAM_success = True
+                            # актуализируем значение конфига
+                            dv_cfg_last_send_tlg_success = get_now()
+                            dv_cfg.set('DEFAULT', 'last_send_tlg_success', dv_cfg_last_send_tlg_success)
+                        else:
+                            dv_is_SEND_TELEGRAM_success = False
+                    except:
+                        dv_is_SEND_TELEGRAM_success = False
+                #
+                # пытаться отправить будем только если предыдущие проверки подтвердили необходимость отправки
+                if dv_is_SEND_TELEGRAM_success is True:
+                    settings.f_telegram_send_message(tlg_bot_token=settings.TLG_BOT_TOKEN, tlg_chat_id=settings.TLG_CHAT_FOR_SEND,
+                                                     txt_name='matomo2clickhouse',
+                                                     txt_type=dv_for_send_txt_type,
+                                                     txt_to_send=f"{dv_for_send_text}",
+                                                     txt_mode=None)
+        except:
+            pass
+        try:
+            # сохраняем файл конфига
+            with open(dv_lib_path_ini, mode='w', encoding='utf-8') as configfile:
+                dv_cfg.write(configfile)
         except:
             pass
         logger.info(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")

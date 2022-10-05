@@ -42,16 +42,16 @@ PATH_TO_LOG = '/var/log/matomo2clickhouse/'
 #
 # Какое максимальное количество запросов обрабатывать за один вызов скрипта
 # replication_batch_size - общее количество строк
-replication_batch_size = 100000
+replication_batch_size = 1000000
 # replication_batch_sql - строк в одном коннекте (ВНИМАНИЕ! для построчного выполнения = 0)
-replication_batch_sql = 2
+replication_batch_sql = 500
 #
 # Какое максимальное количество файлов binlog-а обрабатывать за один вызов (если поставить слишком много, то может надолго подвиснуть)
 replication_max_number_files_per_session = 20
 #
 # максимальное количество минут работы скрипта до остановки (0 - без остановки, int - может понадобиться, чтобы гибче управлять автозапуском)
 # ВНИМАНИЕ! реально может работать на несколько минут дольше указанного
-replication_max_minutes = 100
+replication_max_minutes = 50
 #
 #
 # LEAVE_BINARY_LOGS_IN_DAYS - оставляем бинарные логи за предыдущие Х дней
@@ -107,16 +107,18 @@ CHECK_DISK_SPACE = False
 # TELEGRAM
 # True - отправлять результат в телеграм, False - не отправлять
 SEND_TELEGRAM = False
+# SEND_SUCCESS_REPEATED_NOT_EARLIER_THAN_MINUTES - минимальное количество минут между отправками УСПЕХА (чтобы не заспамить)
+SEND_SUCCESS_REPEATED_NOT_EARLIER_THAN_MINUTES = 360
 # создать бота - получить токен - создать группу - бота сделать администратором - получить id группы
-TLG_BOT_TOKEN = 'token'
+TLG_BOT_TOKEN = 'your_bot_token'
 # TLG_CHAT_FOR_SEND = идентификатор группы
 # Как узнать идентификтор группы:
 # 1. Добавить бота в нужную группу;
 # 2. Написать хотя бы одно сообщение в неё;
 # 3. Отправить GET-запрос по следующему адресу:
-# curl https://api.telegram.org/bot<YourBOTToken>/getUpdates
+# curl https://api.telegram.org/bot<your_bot_token>/getUpdates
 # 4. Взять значение "id" из объекта "chat". Это и есть идентификатор чата. Для групповых чатов он отрицательный, для личных переписок положительный.
-TLG_CHAT_FOR_SEND = 000
+TLG_CHAT_FOR_SEND = -000
 #
 #
 #
