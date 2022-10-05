@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # matomo2clickhouse
 # https://github.com/dneupokoev/matomo2clickhouse
-# 221004
+# 221005
 #
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
