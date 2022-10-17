@@ -14,6 +14,8 @@ import json
 key_path_extra = '/home/kalmukds/matomo_click_pass.json'
 
 
+
+
 f = open(key_path_extra, "r")
 
 key_other = f.read()
@@ -49,7 +51,7 @@ PATH_TO_LIB = '/var/lib/matomo2clickhouse/'
 # sudo mkdir /var/log/matomo2clickhouse
 # выдаем полные права на папку:
 # sudo chmod 777 /var/log/matomo2clickhouse
-PATH_TO_LOG = '/var/log/matomo2clickhouse/'
+PATH_TO_LOG = '/home/kalmukds/logs'
 #
 #
 # Какое максимальное количество запросов обрабатывать за один вызов скрипта
