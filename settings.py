@@ -152,7 +152,13 @@ MySQL_connect = [f"-h{MySQL_matomo_host}",
                  f"-p{MySQL_matomo_password}",
                  f"-d{MySQL_matomo_dbname}",
                  ]
-CH_connect = {'host': CH_matomo_host, 'port': CH_matomo_port, 'database': CH_matomo_dbname}
+CH_connect = {'host': CH_matomo_host,
+              'port': CH_matomo_port, 
+              'user' : CH_matomo_user,
+              'password' : CH_matomo_password,
+              'database': CH_matomo_dbname
+             
+             }
 #
 #
 # Переменная с параметрами для выгрузки бинлога MySQL в ClickHouse
