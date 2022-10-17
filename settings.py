@@ -11,7 +11,7 @@
 # подключение к mysql (matomo)
 import json
 # key_path_extra = 'C:\\Users\\kalmukds\\NOTEBOOKs\\projects\\keys\\matomo_click_pass.json'
-key_path_extra = '/home/kalmukds/matomo_click_pass_test.json'
+key_path_extra = '/home/kalmukds/matomo_click_pass.json'
 
 
 
