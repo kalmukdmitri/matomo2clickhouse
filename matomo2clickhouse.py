@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # matomo2clickhouse
 # https://github.com/dneupokoev/matomo2clickhouse
-# 221005
+dv_file_version = '221024.01'
 #
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 
 import settings
 import os
+import re
 import sys
 import datetime
 import time
@@ -47,8 +48,12 @@ logger.info(f'***')
 logger.info(f'BEGIN')
 logger.info(f'{dv_path_main = }')
 logger.info(f'{dv_file_name = }')
+logger.info(f'{dv_file_version = }')
+#
+dv_find_text = re.compile(r'(\r|\n|\t|\b)')
 
 
+#
 #
 #
 def get_now():
@@ -65,10 +70,36 @@ def get_second_between_now_and_datetime(in_datetime_str='2000-01-01 00:00:00'):
     '''
     вернет количество секунд между текущим временем и полученной датой-временем в формате '%Y-%m-%d %H:%M:%S'
     '''
-    tmp_datetime_sart = datetime.datetime.strptime(in_datetime_str, '%Y-%m-%d %H:%M:%S')
+    tmp_datetime_start = datetime.datetime.strptime(in_datetime_str, '%Y-%m-%d %H:%M:%S')
     tmp_now = datetime.datetime.strptime(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
-    tmp_seconds = int((tmp_now - tmp_datetime_sart).total_seconds())
+    tmp_seconds = int((tmp_now - tmp_datetime_start).total_seconds())
     return tmp_seconds
+
+
+def get_disk_space():
+    '''
+    вернет информацию о свободном месте на диске в гигабайтах
+    dv_statvfs_bavail = Количество свободных гагабайтов, которые разрешено использовать обычным пользователям (исключая зарезервированное пространство)
+    dv_statvfs_blocks = Размер файловой системы в гигабайтах
+    dv_result_bool = true - корректно отработало, false - получить данные не удалось
+    '''
+    dv_statvfs_blocks = 999999
+    dv_statvfs_bavail = dv_statvfs_blocks
+    dv_result_bool = False
+    try:
+        # получаем свободное место на диске ubuntu
+        statvfs = os.statvfs('/')
+        # Size of filesystem in bytes (Размер файловой системы в байтах)
+        dv_statvfs_blocks = round((statvfs.f_frsize * statvfs.f_blocks) / (1024 * 1024 * 1024), 2)
+        # Actual number of free bytes (Фактическое количество свободных байтов)
+        # dv_statvfs_bfree = round((statvfs.f_frsize * statvfs.f_bfree) / (1024 * 1024 * 1024), 2)
+        # Number of free bytes that ordinary users are allowed to use (excl. reserved space)
+        # Количество свободных байтов, которые разрешено использовать обычным пользователям (исключая зарезервированное пространство)
+        dv_statvfs_bavail = round((statvfs.f_frsize * statvfs.f_bavail) / (1024 * 1024 * 1024), 2)
+        dv_result_bool = True
+    except:
+        pass
+    return dv_statvfs_bavail, dv_statvfs_blocks, dv_result_bool
 
 
 class Binlog2sql(object):
@@ -180,7 +211,8 @@ class Binlog2sql(object):
                                         only_tables=self.only_tables, resume_stream=True, blocking=True,
                                         is_mariadb=False, freeze_schema=True)
             flag_last_event = False
-            dv_sql_for_execute = ''
+            dv_sql_for_execute_list = ''
+            dv_sql_for_execute_last = ''
             if self.flashback:
                 self.log_id = self.log_id - settings.replication_batch_size
                 if self.log_id < 0:
@@ -257,32 +289,49 @@ class Binlog2sql(object):
                                 dv_sql_log = "INSERT INTO `%s`.`log_replication` (`dateid`,`log_time`,`log_file`,`log_pos_start`,`log_pos_end`,`sql_type`)" \
                                              " VALUES (%s,'%s','%s',%s,%s,'%s');" \
                                              % (log_shema, get_dateid(), log_time, stream.log_file, int(log_pos_start), int(log_pos_end), sql_type)
-
+                                #
                                 logger.debug(f"execute sql to clickhouse | begin")
-                                if settings.replication_batch_sql == 0:
-                                    with Client(**self.conn_clickhouse_setting) as ch_cursor:
-                                        dv_sql_for_execute = sql
-                                        logger.debug(f"{dv_sql_for_execute = }")
-                                        # выполняем строку sql
-                                        ch_cursor.execute(dv_sql_for_execute)
-                                        dv_sql_for_execute = dv_sql_log
-                                        logger.debug(f"{dv_sql_for_execute = }")
-                                        # выполняем строку sql
-                                        ch_cursor.execute(dv_sql_for_execute)
-                                        dv_sql_for_execute = ''
-                                else:
-                                    dv_sql_for_execute = dv_sql_for_execute + sql + '\n' + dv_sql_log + '\n'
-                                    if (dv_sql_for_execute.count('\n') >= settings.replication_batch_sql) or (
-                                            dv_count_sql_for_ch >= settings.replication_batch_size):
-                                        dv_sql_list_for_execute = dv_sql_for_execute.splitlines()
+                                if (settings.replication_batch_sql == 0) or (len(sql.splitlines()) > 1) or (dv_find_text.search(sql)):
+                                    # сюда попадаем если в настройках указали обработку ПОСТРОЧНО
+                                    # или в запросе есть перевод каретки (СТРОК в запросе > 1)
+                                    # или в запросе есть управляющий символ
+                                    #
+                                    if dv_sql_for_execute_list != '':
+                                        # если ранее уже собрали список запросов, то сначала надо обработать этот список (иначе могут образоваться пропуски данных)
+                                        dv_sql_list_for_execute = dv_sql_for_execute_list.splitlines()
                                         with Client(**self.conn_clickhouse_setting) as ch_cursor:
                                             for dv_sql_line in range(len(dv_sql_list_for_execute)):
                                                 logger.debug(f"{dv_sql_list_for_execute[dv_sql_line] = }")
-                                                # зададим значение dv_sql_for_execute, чтобы в случае ошибки знать на каком именно запросе сломалось
-                                                dv_sql_for_execute = dv_sql_list_for_execute[dv_sql_line]
+                                                # зададим значение dv_sql_for_execute_last, чтобы в случае ошибки знать на каком именно запросе сломалось
+                                                dv_sql_for_execute_last = dv_sql_list_for_execute[dv_sql_line]
                                                 # выполняем строку sql
                                                 ch_cursor.execute(dv_sql_list_for_execute[dv_sql_line])
-                                        dv_sql_for_execute = ''
+                                        dv_sql_for_execute_list = ''
+                                    # далее обрабатываем текущую строку
+                                    with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                                        dv_sql_for_execute_last = sql
+                                        logger.debug(f"{dv_sql_for_execute_last = }")
+                                        # выполняем строку sql
+                                        ch_cursor.execute(dv_sql_for_execute_last)
+                                        dv_sql_for_execute_last = dv_sql_log
+                                        logger.debug(f"{dv_sql_for_execute_last = }")
+                                        # выполняем строку sql
+                                        ch_cursor.execute(dv_sql_for_execute_last)
+                                else:
+                                    # пополняем список запросов и если требуется будем его обрабатывать
+                                    dv_sql_for_execute_list = dv_sql_for_execute_list + sql + '\n' + dv_sql_log + '\n'
+                                    # if (dv_sql_for_execute_list.count('\n') >= settings.replication_batch_sql) or \
+                                    #         (dv_count_sql_for_ch >= settings.replication_batch_size):
+                                    if dv_count_sql_for_ch >= settings.replication_batch_size:
+                                        dv_sql_list_for_execute = dv_sql_for_execute_list.splitlines()
+                                        with Client(**self.conn_clickhouse_setting) as ch_cursor:
+                                            for dv_sql_line in range(len(dv_sql_list_for_execute)):
+                                                logger.debug(f"{dv_sql_list_for_execute[dv_sql_line] = }")
+                                                # зададим значение dv_sql_for_execute_last, чтобы в случае ошибки знать на каком именно запросе сломалось
+                                                dv_sql_for_execute_last = dv_sql_list_for_execute[dv_sql_line]
+                                                # выполняем строку sql
+                                                ch_cursor.execute(dv_sql_list_for_execute[dv_sql_line])
+                                        dv_sql_for_execute_list = ''
                                 logger.debug(f"execute sql to clickhouse | end")
                     #
                     # если обработали заданное "максимальное количество запросов обрабатывать за один вызов", то прерываем цикл
@@ -305,12 +354,13 @@ class Binlog2sql(object):
                     self.print_rollback_sql(filename=tmp_file)
                 #
                 # чистим старые логи
-                self.clear_binlog(log_time=log_time)
+                if settings.LEAVE_BINARY_LOGS_IN_DAYS > 0 and settings.LEAVE_BINARY_LOGS_IN_DAYS < 99:
+                    self.clear_binlog(log_time=log_time)
         #
         except Exception as ERROR:
             f_status = 'ERROR'
-            if dv_sql_for_execute != '':
-                f_text = f"'ERROR = LAST_SQL:\n\n{dv_sql_for_execute}\n\n{ERROR = }"
+            if dv_sql_for_execute_last != '':
+                f_text = f"'ERROR = LAST_SQL:\n\n{dv_sql_for_execute_last}\n\n{ERROR = }"
             else:
                 f_text = f"{ERROR}"
         else:
@@ -367,6 +417,10 @@ def get_ch_param_for_next(connection_clickhouse_setting):
 
 if __name__ == '__main__':
     dv_time_begin = time.time()
+    # получаем информацию о свободном месте на диске в гигабайтах
+    dv_disk_space_free_begin = get_disk_space()[0]
+    logger.info(f"{dv_disk_space_free_begin = } Gb")
+    #
     logger.info(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
     dv_for_send_txt_type = ''
     dv_for_send_text = ''
@@ -444,19 +498,16 @@ if __name__ == '__main__':
         dv_for_send_txt_type = 'ERROR'
         dv_for_send_text = f"{ERROR = }"
     finally:
+        # получаем информацию о свободном месте на диске в гигабайтах
+        dv_disk_space_free_end, dv_statvfs_blocks, dv_result_bool = get_disk_space()
+        logger.info(f"{dv_disk_space_free_end = } Gb")
         try:
             if settings.CHECK_DISK_SPACE is True:
-                # получаем свободное место на диске ubuntu
-                statvfs = os.statvfs('/')
-                # Size of filesystem in bytes (Размер файловой системы в байтах)
-                dv_statvfs_blocks = round((statvfs.f_frsize * statvfs.f_blocks) / (1024 * 1024 * 1024), 2)
-                # Actual number of free bytes (Фактическое количество свободных байтов)
-                # dv_statvfs_bfree = round((statvfs.f_frsize * statvfs.f_bfree) / (1024 * 1024 * 1024), 2)
-                # Number of free bytes that ordinary users are allowed to use (excl. reserved space)
-                # Количество свободных байтов, которые разрешено использовать обычным пользователям (исключая зарезервированное пространство)
-                dv_statvfs_bavail = round((statvfs.f_frsize * statvfs.f_bavail) / (1024 * 1024 * 1024), 2)
                 # формируем текст о состоянии места на диске
-                dv_for_send_text = f"{dv_for_send_text} | disk space all/free: {dv_statvfs_blocks}/{dv_statvfs_bavail} Gb"
+                if dv_result_bool is True:
+                    dv_for_send_text = f"{dv_for_send_text} | disk space all/free_begin/free_end: {dv_statvfs_blocks}/{dv_disk_space_free_begin}/{dv_disk_space_free_end} Gb"
+                else:
+                    dv_for_send_text = f"{dv_for_send_text} | check_disk_space = ERROR"
         except:
             pass
         logger.info(f"{dv_for_send_text}")
@@ -483,7 +534,7 @@ if __name__ == '__main__':
                 # пытаться отправить будем только если предыдущие проверки подтвердили необходимость отправки
                 if dv_is_SEND_TELEGRAM_success is True:
                     settings.f_telegram_send_message(tlg_bot_token=settings.TLG_BOT_TOKEN, tlg_chat_id=settings.TLG_CHAT_FOR_SEND,
-                                                     txt_name='matomo2clickhouse',
+                                                     txt_name=f"matomo2clickhouse {dv_file_version}",
                                                      txt_type=dv_for_send_txt_type,
                                                      txt_to_send=f"{dv_for_send_text}",
                                                      txt_mode=None)
@@ -495,7 +546,9 @@ if __name__ == '__main__':
                 dv_cfg.write(configfile)
         except:
             pass
+        #
         logger.info(f"{datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')}")
         work_time_ms = int('{:.0f}'.format(1000 * (time.time() - dv_time_begin)))
         logger.info(f"{work_time_ms = }")
+        #
         logger.info(f'END')
