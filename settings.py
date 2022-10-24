@@ -70,7 +70,7 @@ replication_max_minutes = 50
 #
 # LEAVE_BINARY_LOGS_IN_DAYS - оставляем бинарные логи за предыдущие Х дней
 # ВНИМАНИЕ! логи чистятся только если последняя точка репликации позже, чем точка в логах для удаления NOW-точка > LEAVE_BINARY_LOGS_IN_DAYS
-LEAVE_BINARY_LOGS_IN_DAYS = 7
+LEAVE_BINARY_LOGS_IN_DAYS = 180
 # sql: PURGE BINARY LOGS BEFORE DATE(NOW() - INTERVAL 30 DAY) + INTERVAL 0 SECOND;
 #
 #
