@@ -51,7 +51,7 @@ PATH_TO_LIB = '/home/kalmukds/matomo2clickhouse/'
 # sudo mkdir /var/log/matomo2clickhouse
 # выдаем полные права на папку:
 # sudo chmod 777 /var/log/matomo2clickhouse
-PATH_TO_LOG = '/home/kalmukds/logs'
+PATH_TO_LOG = '/var/log/matomo2clickhouse'
 #
 #
 # Какое максимальное количество запросов обрабатывать за один вызов скрипта
