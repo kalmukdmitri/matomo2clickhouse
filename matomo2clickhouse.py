@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # matomo2clickhouse
 # https://github.com/dneupokoev/matomo2clickhouse
-dv_file_version = '221024.01'
+dv_file_version = '221026.01'
 #
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
@@ -318,11 +318,13 @@ class Binlog2sql(object):
                                         # выполняем строку sql
                                         ch_cursor.execute(dv_sql_for_execute_last)
                                 else:
-                                    # пополняем список запросов и если требуется будем его обрабатывать
+                                    # пополняем список запросов и если требуется, то будем его обрабатывать
                                     dv_sql_for_execute_list = dv_sql_for_execute_list + sql + '\n' + dv_sql_log + '\n'
-                                    # if (dv_sql_for_execute_list.count('\n') >= settings.replication_batch_sql) or \
-                                    #         (dv_count_sql_for_ch >= settings.replication_batch_size):
-                                    if dv_count_sql_for_ch >= settings.replication_batch_size:
+                                    if (dv_sql_for_execute_list.count('\n') >= settings.replication_batch_sql) or \
+                                            (dv_count_sql_for_ch >= settings.replication_batch_size):
+                                        # попадаем сбда если в запрос собрали строк больше, чем replication_batch_sql
+                                        # или обработали уже больше replication_batch_size запросов
+                                        # (это нужно чтобы не слишком много съедать памяти)
                                         dv_sql_list_for_execute = dv_sql_for_execute_list.splitlines()
                                         with Client(**self.conn_clickhouse_setting) as ch_cursor:
                                             for dv_sql_line in range(len(dv_sql_list_for_execute)):
