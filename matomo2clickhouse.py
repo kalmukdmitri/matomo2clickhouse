@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # matomo2clickhouse
 # https://github.com/dneupokoev/matomo2clickhouse
-dv_file_version = '221026.01'
+dv_file_version = '221101.02'
 #
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
@@ -10,6 +10,7 @@ import settings
 import os
 import re
 import sys
+import platform
 import datetime
 import time
 import pymysql
@@ -46,6 +47,18 @@ else:
 logger.enable(dv_file_name)  # даем имя логированию
 logger.info(f'***')
 logger.info(f'BEGIN')
+try:
+    # Получаем версию ОС
+    logger.info(f'os.version = {platform.platform()}')
+except Exception as error:
+    # Не удалось получить версию ОС
+    logger.error(f'ERROR - os.version: {error = }')
+try:
+    # Получаем версию питона
+    logger.info(f'python.version = {sys.version}')
+except Exception as error:
+    # Не удалось получить версию питона
+    logger.error(f'ERROR - python.version: {error = }')
 logger.info(f'{dv_path_main = }')
 logger.info(f'{dv_file_name = }')
 logger.info(f'{dv_file_version = }')
@@ -484,6 +497,10 @@ if __name__ == '__main__':
         # print(f"{args = }")
         # print('***')
         #
+        try:
+            logger.info(f"binlog_datetime_start = {args.start_time}")
+        except:
+            pass
         binlog2sql = Binlog2sql(connection_mysql_setting=conn_mysql_setting,
                                 connection_clickhouse_setting=conn_clickhouse_setting,
                                 start_file=args.start_file, start_pos=args.start_pos,
@@ -546,6 +563,12 @@ if __name__ == '__main__':
             # сохраняем файл конфига
             with open(dv_lib_path_ini, mode='w', encoding='utf-8') as configfile:
                 dv_cfg.write(configfile)
+        except:
+            pass
+        try:
+            # получаем позицию binlog-а, до которой обработали (для статистики)
+            log_id, dv_binlog_datetime_end, log_file, log_pos_end = get_ch_param_for_next(connection_clickhouse_setting=conn_clickhouse_setting)
+            logger.info(f"binlog_datetime_end = {dv_binlog_datetime_end}")
         except:
             pass
         #
