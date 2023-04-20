@@ -1,10 +1,17 @@
 # -*- coding: utf-8 -*-
 # matomo2clickhouse
 # https://github.com/dneupokoev/matomo2clickhouse
-# 221005
 #
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
+#
+# 230403:
+# + добавил параметр settings.EXECUTE_CLICKHOUSE (нужен для тестирования) - True: выполнять insert в ClickHouse (боевой режим); False: не выполнять insert (для тестирования и отладки)
+# + изменил параметр CH_matomo_dbname - теперь базы в MySQL и ClickHouse могут иметь разные названия
+#
+# 221005:
+# + базовая стабильная версия (полностью протестированная и отлаженная)
+#
 #
 # ВНИМАНИЕ!!! Перед запуском необходимо ЗАПОЛНИТЬ пароли в данном файле и ПЕРЕИМЕНОВАТЬ его в settings.py
 #
@@ -17,15 +24,20 @@ MySQL_matomo_password = 'password'
 #
 CH_matomo_host = '192.168.5.'
 CH_matomo_port = 9000
-CH_matomo_dbname = MySQL_matomo_dbname
+CH_matomo_dbname = 'matomo'
 CH_matomo_user = 'user'
 CH_matomo_password = 'password'
 #
 #
 #
 # *** Настройки ***
-# для избыточного логирования True, иначе False
+# для избыточного логирования True (для тестирования и отладки), иначе False
+# DEBUG = True
 DEBUG = False
+#
+# EXECUTE_CLICKHOUSE - True: выполнять insert в ClickHouse (боевой режим); False: не выполнять insert (для тестирования и отладки)
+EXECUTE_CLICKHOUSE = True
+# EXECUTE_CLICKHOUSE = False
 #
 # создаем папку для логов:
 # sudo mkdir /var/lib/matomo2clickhouse
@@ -43,8 +55,10 @@ PATH_TO_LOG = '/var/log/matomo2clickhouse/'
 # Какое максимальное количество запросов обрабатывать за один вызов скрипта
 # replication_batch_size - общее количество строк
 replication_batch_size = 1000000
+#
 # replication_batch_sql - строк в одном коннекте (ВНИМАНИЕ! для построчного выполнения = 0)
-replication_batch_sql = 500
+# Оптимально около 2000. Если сделать слишком мало, то будет медленно. Если сделать слишком много, то либо съест ОЗУ, либо ClickHouse не сможет обработать такой большой запрос.
+replication_batch_sql = 2000
 #
 # Какое максимальное количество файлов binlog-а обрабатывать за один вызов (если поставить слишком много, то может надолго подвиснуть)
 replication_max_number_files_per_session = 20
@@ -56,7 +70,7 @@ replication_max_minutes = 50
 #
 # LEAVE_BINARY_LOGS_IN_DAYS - оставляем бинарные логи за предыдущие Х дней
 # ВНИМАНИЕ! логи чистятся только если последняя точка репликации позже, чем точка в логах для удаления NOW-точка > LEAVE_BINARY_LOGS_IN_DAYS
-LEAVE_BINARY_LOGS_IN_DAYS = 7
+LEAVE_BINARY_LOGS_IN_DAYS = 180
 # sql: PURGE BINARY LOGS BEFORE DATE(NOW() - INTERVAL 30 DAY) + INTERVAL 0 SECOND;
 #
 #
@@ -83,12 +97,12 @@ replication_tables = [
     'matomo_log_visit',
     'matomo_site',
     'matomo_site_url',
-    'matomo_tagmanager_container',
-    'matomo_tagmanager_container_release',
-    'matomo_tagmanager_container_version',
-    'matomo_tagmanager_tag',
-    'matomo_tagmanager_trigger',
-    'matomo_tagmanager_variable',
+    # 'matomo_tagmanager_container',
+    # 'matomo_tagmanager_container_release',
+    # 'matomo_tagmanager_container_version',
+    # 'matomo_tagmanager_tag',
+    # 'matomo_tagmanager_trigger',
+    # 'matomo_tagmanager_variable',
 ]
 #
 # таблицы, в которые все update будем менять на insert

@@ -1,10 +1,21 @@
 # -*- coding: utf-8 -*-
 # matomo2clickhouse
 # https://github.com/dneupokoev/matomo2clickhouse
-# 221005
 #
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
+#
+#
+# 230404:
+# + добавил поля sql_4insert_table и sql_4insert_values - для объединения инсертов в один большой
+#
+# 230403:
+# + добавил функцию get_schema_clickhouse и переписал все с учетом этой функции
+#
+# 221005:
+# + базовая стабильная версия (полностью протестированная и отлаженная)
+#
+
 
 import settings
 import os
@@ -29,9 +40,32 @@ else:
     PY3PLUS = False
 
 
+def get_schema_clickhouse(in_schema=''):
+    try:
+        out_schema = settings.CH_matomo_dbname
+    except:
+        out_schema = in_schema
+    return out_schema
+
+
+def get_correct_sql(sql=''):
+    # sql = sql.replace('=NULL', ' is NULL')
+    #
+    sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r", \1", sql)
+    sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r", '\1'", sql)
+    #
+    sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r"`=\1", sql)
+    sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r"`='\1'", sql)
+    #
+    sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])' AND", r"`=\1 AND", sql)
+    sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9]) AND", r"`='\1' AND", sql)
+    #
+    return sql
+
+
 def get_dateid():
     '''
-    функция возвращает псевдоуникальный (скорее всего именно уникальный, т.к. учитывает доли секунд) ключ, основанный на дате:
+    Функция возвращает псевдоуникальный (скорее всего именно уникальный, т.к. учитывает доли секунд) ключ, основанный на дате:
     UInt64
     Пример: 16647739613876690
     1664773961 - 3876690
@@ -202,35 +236,38 @@ def event_type(event):
 
 
 def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False, for_clickhouse=False):
+    # print('***')
+    # print('concat_sql_from_binlog_event - begin')
     if flashback and no_pk:
         raise ValueError('only one of flashback or no_pk can be True')
     if not (isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent)
             or isinstance(binlog_event, DeleteRowsEvent) or isinstance(binlog_event, QueryEvent)):
         raise ValueError('binlog_event must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
-
     sql = ''
     time = ''
     sql_type = ''
+    sql_4insert_table = ''
+    sql_4insert_values = ''
     log_pos_start = e_start_pos
     log_pos_end = binlog_event.packet.log_pos
     if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
             or isinstance(binlog_event, DeleteRowsEvent):
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk, for_clickhouse=for_clickhouse)
         # print(f"{pattern = }")
+        # print(f"{pattern['template'] = }")
+        # print(f"{pattern['values'] = }")
         sql_type = pattern['sql_type']
+        if sql_type in ('INSERT', 'IN-UPD'):
+            sql_4insert_table = pattern['sql_4insert_table']
+            # print(f"{sql_4insert_table = }")
+            sql_4insert_values = cursor.mogrify(pattern['sql_4insert_values'], pattern['values'])
+            # print(f"{sql_4insert_values = }")
+            sql_4insert_values = get_correct_sql(sql_4insert_values)
+            # print(f"{sql_4insert_values = }")
         sql = cursor.mogrify(pattern['template'], pattern['values'])
         # print(f"{sql = }")
-        #
-        # sql = sql.replace('=NULL', ' is NULL')
-        #
-        sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r", \1", sql)
-        sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r", '\1'", sql)
-        #
-        sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r"`=\1", sql)
-        sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r"`='\1'", sql)
-        #
-        sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])' AND", r"`=\1 AND", sql)
-        sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9]) AND", r"`='\1' AND", sql)
+        sql = get_correct_sql(sql)
+        # print(f"{sql = }")
         #
         time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
         if for_clickhouse is True:
@@ -247,39 +284,42 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
             if binlog_event.schema:
                 sql = 'USE {0};\n'.format(binlog_event.schema)
             sql += '{0};'.format(fix_object(binlog_event.query))
-
-    return sql, log_pos_start, log_pos_end, binlog_event.schema, binlog_event.table, time, sql_type
+    # print('concat_sql_from_binlog_event - end')
+    # print('***')
+    return sql, log_pos_start, log_pos_end, get_schema_clickhouse(binlog_event.schema), binlog_event.table, time, sql_type, sql_4insert_table, sql_4insert_values
 
 
 def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, for_clickhouse=False):
     template = ''
     values = []
     sql_type = ''
+    sql_4insert_table = ''
+    sql_4insert_values = ''
     if flashback is True:
         if isinstance(binlog_event, WriteRowsEvent):
             sql_type = 'DELETE'
             if for_clickhouse is True:
                 template = 'ALTER TABLE `{0}`.`{1}` DELETE WHERE {2};'.format(
-                    binlog_event.schema, binlog_event.table,
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ' AND '.join(map(compare_items, row['values'].items()))
                 )
             else:
                 template = 'DELETE FROM `{0}`.`{1}` WHERE {2} LIMIT 1;'.format(
-                    binlog_event.schema, binlog_event.table,
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ' AND '.join(map(compare_items, row['values'].items()))
                 )
             values = map(fix_object, row['values'].values())
         elif isinstance(binlog_event, DeleteRowsEvent):
             sql_type = 'INSERT'
             if for_clickhouse is True:
-                template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                    binlog_event.schema, binlog_event.table,
+                template = 'INSERT INTO `{0}`.`{1}` ({2}) VALUES ({3});'.format(
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
                     ', '.join(['%s'] * len(row['values']))
                 )
             else:
-                template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                    binlog_event.schema, binlog_event.table,
+                template = 'INSERT INTO `{0}`.`{1}` ({2}) VALUES ({3});'.format(
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
                     ', '.join(['%s'] * len(row['values']))
                 )
@@ -288,12 +328,12 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
             sql_type = 'UPDATE'
             if for_clickhouse is True:
                 template = 'ALTER TABLE `{0}`.`{1}` UPDATE {2} WHERE {3};'.format(
-                    binlog_event.schema, binlog_event.table,
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ', '.join(['`%s`=%%s' % x for x in row['before_values'].keys()]),
                     ' AND '.join(map(compare_items, row['after_values'].items())))
             else:
                 template = 'UPDATE `{0}`.`{1}` SET {2} WHERE {3} LIMIT 1;'.format(
-                    binlog_event.schema, binlog_event.table,
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ', '.join(['`%s`=%%s' % x for x in row['before_values'].keys()]),
                     ' AND '.join(map(compare_items, row['after_values'].items())))
             values = map(fix_object, list(row['before_values'].values()) + list(row['after_values'].values()))
@@ -314,14 +354,18 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                 if binlog_event.table in settings.tables_not_updated:
                     # добавляем поле dateid
                     row['values']['dateid'] = get_dateid()
-                template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                    binlog_event.schema, binlog_event.table,
+                template = 'INSERT INTO `{0}`.`{1}` ({2}) VALUES ({3});'.format(
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
                     ', '.join(['%s'] * len(row['values']))
                 )
+                sql_4insert_table = 'INSERT INTO `{0}`.`{1}` ({2}) VALUES '.format(
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
+                    ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())))
+                sql_4insert_values = '({0})'.format(', '.join(['%s'] * len(row['values'])))
             else:
                 template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                    binlog_event.schema, binlog_event.table,
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
                     ', '.join(['%s'] * len(row['values']))
                 )
@@ -332,10 +376,10 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
             sql_type = 'DELETE'
             if for_clickhouse is True:
                 template = 'ALTER TABLE `{0}`.`{1}` DELETE WHERE {2};'.format(
-                    binlog_event.schema, binlog_event.table, ' AND '.join(map(compare_items, row['values'].items())))
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table, ' AND '.join(map(compare_items, row['values'].items())))
             else:
                 template = 'DELETE FROM `{0}`.`{1}` WHERE {2} LIMIT 1;'.format(
-                    binlog_event.schema, binlog_event.table, ' AND '.join(map(compare_items, row['values'].items())))
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table, ' AND '.join(map(compare_items, row['values'].items())))
             values = map(fix_object, row['values'].values())
         elif isinstance(binlog_event, UpdateRowsEvent):
             sql_type = 'UPDATE'
@@ -349,11 +393,15 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                     sql_type = 'INS-UPD'
                     # print(f"{row['after_values'].keys() = }")
                     # print(f"{row['after_values'].values() = }")
-                    template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                        binlog_event.schema, binlog_event.table,
+                    template = 'INSERT INTO `{0}`.`{1}` ({2}) VALUES ({3});'.format(
+                        get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                         ', '.join(map(lambda key: '`%s`' % key, row['after_values'].keys())),
                         ', '.join(['%s'] * len(row['after_values']))
                     )
+                    sql_4insert_table = 'INSERT INTO `{0}`.`{1}` ({2}) VALUES '.format(
+                        get_schema_clickhouse(binlog_event.schema), binlog_event.table,
+                        ', '.join(map(lambda key: '`%s`' % key, row['after_values'].keys())))
+                    sql_4insert_values = '({0})'.format(', '.join(['%s'] * len(row['after_values'])))
                     values = map(fix_object, row['after_values'].values())
                     # print(f"{row['after_values'].values() = }")
                 else:
@@ -365,19 +413,19 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False, f
                             del row['after_values'][dv_key_name]
                             pass
                     template = 'ALTER TABLE `{0}`.`{1}` UPDATE {2} WHERE {3};'.format(
-                        binlog_event.schema, binlog_event.table,
+                        get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                         ', '.join(['`%s`=%%s' % k for k in row['after_values'].keys()]),
                         ' AND '.join(['`%s`=%%s' % k for k in row['before_values'].keys()])
                     )
                     values = map(fix_object, list(row['after_values'].values()) + list(row['before_values'].values()))
             else:
                 template = 'UPDATE `{0}`.`{1}` SET {2} WHERE {3} LIMIT 1;'.format(
-                    binlog_event.schema, binlog_event.table,
+                    get_schema_clickhouse(binlog_event.schema), binlog_event.table,
                     ', '.join(['`%s`=%%s' % k for k in row['after_values'].keys()]),
                     ' AND '.join(map(compare_items, row['before_values'].items()))
                 )
                 values = map(fix_object, list(row['after_values'].values()) + list(row['before_values'].values()))
-    return {'sql_type': sql_type, 'template': template, 'values': list(values)}
+    return {'sql_type': sql_type, 'template': template, 'sql_4insert_table': sql_4insert_table, 'sql_4insert_values': sql_4insert_values, 'values': list(values)}
 
 
 def reversed_lines(fin):
