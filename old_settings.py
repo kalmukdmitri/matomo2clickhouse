@@ -1,33 +1,27 @@
 # -*- coding: utf-8 -*-
 # matomo2clickhouse
 # https://github.com/dneupokoev/matomo2clickhouse
+# 221005
 #
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 #
-# 230403:
-# + добавил параметр settings.EXECUTE_CLICKHOUSE (нужен для тестирования) - True: выполнять insert в ClickHouse (боевой режим); False: не выполнять insert (для тестирования и отладки)
-# + изменил параметр CH_matomo_dbname - теперь базы в MySQL и ClickHouse могут иметь разные названия
-#
-# 221005:
-# + базовая стабильная версия (полностью протестированная и отлаженная)
-#
-#
 # ВНИМАНИЕ!!! Перед запуском необходимо ЗАПОЛНИТЬ пароли в данном файле и ПЕРЕИМЕНОВАТЬ его в settings.py
 #
 # подключение к mysql (matomo)
-
 import json
 # key_path_extra = 'C:\\Users\\kalmukds\\NOTEBOOKs\\projects\\keys\\matomo_click_pass.json'
 key_path_extra = '/home/kalmukds/matomo_click_pass.json'
 
 
+
+
 f = open(key_path_extra, "r")
+
 key_other = f.read()
 keys = json.loads(key_other)
 sql = keys['MySQL_pass']
 click = keys['clickhouse_pass']
-
 
 MySQL_matomo_host = sql['MySQL_matomo_host']
 MySQL_matomo_port = sql['MySQL_matomo_port']
@@ -44,13 +38,8 @@ CH_matomo_password = click['CH_matomo_password']
 #
 #
 # *** Настройки ***
-# для избыточного логирования True (для тестирования и отладки), иначе False
-# DEBUG = True
+# для избыточного логирования True, иначе False
 DEBUG = False
-#
-# EXECUTE_CLICKHOUSE - True: выполнять insert в ClickHouse (боевой режим); False: не выполнять insert (для тестирования и отладки)
-EXECUTE_CLICKHOUSE = True
-# EXECUTE_CLICKHOUSE = False
 #
 # создаем папку для логов:
 # sudo mkdir /var/lib/matomo2clickhouse
@@ -68,10 +57,8 @@ PATH_TO_LOG = '/var/log/matomo2clickhouse/'
 # Какое максимальное количество запросов обрабатывать за один вызов скрипта
 # replication_batch_size - общее количество строк
 replication_batch_size = 1000000
-#
 # replication_batch_sql - строк в одном коннекте (ВНИМАНИЕ! для построчного выполнения = 0)
-# Оптимально около 2000. Если сделать слишком мало, то будет медленно. Если сделать слишком много, то либо съест ОЗУ, либо ClickHouse не сможет обработать такой большой запрос.
-replication_batch_sql = 2000
+replication_batch_sql = 500
 #
 # Какое максимальное количество файлов binlog-а обрабатывать за один вызов (если поставить слишком много, то может надолго подвиснуть)
 replication_max_number_files_per_session = 20
@@ -183,7 +170,7 @@ args_for_mysql_to_clickhouse = [''] + \
 #
 #
 #
-#
+# #
 # import telebot
 
 
