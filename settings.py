@@ -46,8 +46,7 @@ CH_matomo_password = click['CH_matomo_password']
 # *** Настройки ***
 # для избыточного логирования True (для тестирования и отладки), иначе False
 # DEBUG = True
-DEBUG = False
-#
+DEBUG = True
 # EXECUTE_CLICKHOUSE - True: выполнять insert в ClickHouse (боевой режим); False: не выполнять insert (для тестирования и отладки)
 EXECUTE_CLICKHOUSE = True
 # EXECUTE_CLICKHOUSE = False
@@ -67,11 +66,11 @@ PATH_TO_LOG = '/var/log/matomo2clickhouse/'
 #
 # Какое максимальное количество запросов обрабатывать за один вызов скрипта
 # replication_batch_size - общее количество строк
-replication_batch_size = 1000000
+replication_batch_size = 1
 #
 # replication_batch_sql - строк в одном коннекте (ВНИМАНИЕ! для построчного выполнения = 0)
 # Оптимально около 2000. Если сделать слишком мало, то будет медленно. Если сделать слишком много, то либо съест ОЗУ, либо ClickHouse не сможет обработать такой большой запрос.
-replication_batch_sql = 2000
+replication_batch_sql = 0
 #
 # Какое максимальное количество файлов binlog-а обрабатывать за один вызов (если поставить слишком много, то может надолго подвиснуть)
 replication_max_number_files_per_session = 20
