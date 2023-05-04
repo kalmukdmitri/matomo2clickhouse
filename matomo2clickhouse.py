@@ -5,7 +5,10 @@
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 #
-dv_file_version = '230406.01'
+dv_file_version = '230502.01'
+#
+# 230502.01:
+# + исправил ошибку обработки одинарной кавычки в запросе: добавил перед кавычкой экранирование, чтобы sql-запрос отрабатывал корректно
 #
 # 230406.01:
 # + для ускорения изменил алгоритм: теперь запросы группируются, собираются в батчи и выполняются сразу партиями (обработка ускорилась примерно в 12 раз). Для тонкой настройки можно "поиграть" параметром settings.replication_batch_sql
@@ -28,6 +31,7 @@ import datetime
 import time
 import pymysql
 import configparser
+import json
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
 from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, reversed_lines, is_dml_event, event_type, get_dateid
@@ -372,6 +376,16 @@ class Binlog2sql(object):
                             print(sql)
                     elif is_dml_event(binlog_event) and event_type(binlog_event) in self.sql_type:
                         for row in binlog_event.rows:
+                            logger.debug(f" {type(row) = }")
+                            logger.debug(f"BEFORE: {row = }")
+                            try:
+                                for dv_row_key, dv_row_value in row['values'].items():
+                                    if isinstance(row['values'][dv_row_key], str):
+                                        row['values'][dv_row_key] = row['values'][dv_row_key].replace("'", "\'")
+                                        row['values'][dv_row_key] = row['values'][dv_row_key].replace('"', '\"')
+                            except:
+                                pass
+                            logger.debug(f"AFTER: {row = }")
                             dv_count_sql_for_ch += 1
                             logger.debug(f" {dv_count_sql_for_ch = }")
                             sql, log_pos_start, log_pos_end, log_shema, log_table, log_time, sql_type, sql_4insert_table, sql_4insert_values = concat_sql_from_binlog_event(
@@ -383,6 +397,8 @@ class Binlog2sql(object):
                                 e_start_pos=e_start_pos,
                                 for_clickhouse=self.for_clickhouse)
                             logger.debug(f" {sql = }")
+                            logger.debug(f" {sql_4insert_values = }")
+                            logger.debug(f" {type(sql_4insert_values) = }")
                             if self.for_clickhouse is True:
                                 pass
                             else:
