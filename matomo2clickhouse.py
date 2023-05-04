@@ -5,7 +5,7 @@
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 #
-dv_file_version = '230502.01'
+dv_file_version = '230504.01'
 #
 # 230502.01:
 # + исправил ошибку обработки одинарной кавычки в запросе: добавил перед кавычкой экранирование, чтобы sql-запрос отрабатывал корректно
@@ -381,7 +381,8 @@ class Binlog2sql(object):
                             try:
                                 for dv_row_key, dv_row_value in row['values'].items():
                                     if isinstance(row['values'][dv_row_key], str):
-                                        row['values'][dv_row_key] = row['values'][dv_row_key].replace("'", "\'")
+                                        row['values'][dv_row_key] = row['values'][dv_row_key].replace("'", "''")
+                                        # row['values'][dv_row_key] = row['values'][dv_row_key].replace("'", "\'")
                                         row['values'][dv_row_key] = row['values'][dv_row_key].replace('"', '\"')
                             except:
                                 pass
