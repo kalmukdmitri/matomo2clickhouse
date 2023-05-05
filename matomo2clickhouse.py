@@ -5,10 +5,12 @@
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 #
-dv_file_version = '230505.01'
+dv_file_version = '230505.02'
 #
-# 230505.01:
+# 230505.02:
 # + исправил ошибку обработки одинарной кавычки в запросе: добавил перед кавычкой экранирование, чтобы sql-запрос отрабатывал корректно
+# + добавил автоматическое изменение на построчное выполнение запросов (при следующем запуске) после ошибки выполнения запроса - необходимо для определения проблемного запроса без изменения параметров: запрос будет в логе в строке с dv_sql_for_execute_last после повторного запуска после появления ошибки
+# + добавил больше логирования
 #
 # 230406.01:
 # + для ускорения изменил алгоритм: теперь запросы группируются, собираются в батчи и выполняются сразу партиями (обработка ускорилась примерно в 12 раз). Для тонкой настройки можно "поиграть" параметром settings.replication_batch_sql
@@ -434,7 +436,7 @@ class Binlog2sql(object):
                                              " VALUES (%s,'%s','%s',%s,%s,'%s');" \
                                              % (log_shema, get_dateid(), log_time, stream.log_file, int(log_pos_start), int(log_pos_end), sql_type)
                                 #
-                                if (settings.replication_batch_sql == 0) or (
+                                if (dv_replication_batch_sql == 0) or (
                                         sql_type not in ('INSERT', 'INS-UPD')) or (
                                         len(sql.splitlines()) > 1) or (
                                         dv_find_text.search(sql) is not None):
@@ -473,7 +475,7 @@ class Binlog2sql(object):
                                         if dv_EXECUTE_CLICKHOUSE is True:
                                             ch_cursor.execute(dv_sql_for_execute_last)
                                         #
-                                        if settings.replication_batch_sql == 0:
+                                        if dv_replication_batch_sql == 0:
                                             # если включена построчная запись, то будем писать лог для каждой строки
                                             dv_sql_for_execute_last = dv_sql_log
                                             dv_sql_log = ''
@@ -487,7 +489,7 @@ class Binlog2sql(object):
                                     dv_sql_4insert_dict.setdefault(sql_4insert_table, []).append(sql_4insert_values)
                                     # до 230405 было так:
                                     # dv_sql_for_execute_list = dv_sql_for_execute_list + sql + '\n' + dv_sql_log + '\n'
-                                    # if (dv_sql_for_execute_list.count('\n') >= settings.replication_batch_sql) or \
+                                    # if (dv_sql_for_execute_list.count('\n') >= dv_replication_batch_sql) or \
                                     #         (dv_count_sql_for_ch >= settings.replication_batch_size):
                                     #     # попадаем сюда если в запрос собрали строк больше, чем replication_batch_sql
                                     #     # или обработали уже больше replication_batch_size запросов
@@ -504,12 +506,12 @@ class Binlog2sql(object):
                                     #     dv_sql_for_execute_list = ''
                                     # с 230405 стало так:
                                     dv_count_values_from_dv_sql_4insert_dict = sum(map(len, dv_sql_4insert_dict.values()))
-                                    if (dv_count_values_from_dv_sql_4insert_dict > settings.replication_batch_sql) or \
+                                    if (dv_count_values_from_dv_sql_4insert_dict > dv_replication_batch_sql) or \
                                             (dv_count_sql_for_ch > settings.replication_batch_size):
                                         # попадаем сюда если в запрос собрали строк больше, чем replication_batch_sql
                                         # или обработали уже больше replication_batch_size запросов
                                         # (это нужно чтобы не слишком много съедать памяти)
-                                        logger.info(f"BATCH: {(dv_count_values_from_dv_sql_4insert_dict >= settings.replication_batch_sql) = } | {(dv_count_sql_for_ch >= settings.replication_batch_size) = }")
+                                        logger.info(f"BATCH: {(dv_count_values_from_dv_sql_4insert_dict >= dv_replication_batch_sql) = } | {(dv_count_sql_for_ch >= settings.replication_batch_size) = }")
                                         dv_sql_4insert_dict, dv_sql_for_execute_last = self.execute_in_clickhouse(dv_sql_4insert_dict=dv_sql_4insert_dict)
                                 logger.debug(f"execute sql to clickhouse | end")
                     #
@@ -638,8 +640,20 @@ if __name__ == '__main__':
                 dv_cfg.read_file(fp)
         # читаем значения
         dv_cfg_last_send_tlg_success = dv_cfg.get('DEFAULT', 'last_send_tlg_success', fallback='2000-01-01 00:00:00')
+        dv_cfg_last_run_is_success = dv_cfg.get('DEFAULT', 'last_run_is_success', fallback=1)
+        logger.info(f"read cfg success")
     except:
+        logger.error(f"read cfg error")
         pass
+    logger.info(f"{dv_cfg_last_send_tlg_success = }")
+    logger.info(f"{dv_cfg_last_run_is_success = }")
+    #
+    # если последний запуск завершился ошибкой, то принудительно будем се запросы по одному
+    if dv_cfg_last_run_is_success == '0':
+        dv_replication_batch_sql = 0
+    else:
+        dv_replication_batch_sql = settings.replication_batch_sql
+    logger.info(f"{dv_replication_batch_sql = }")
     #
     try:
         dv_file_lib_path = f"{settings.PATH_TO_LIB}/matomo2clickhouse.dat"
@@ -702,11 +716,24 @@ if __name__ == '__main__':
                                 sql_type=args.sql_type, for_clickhouse=args.for_clickhouse,
                                 log_id=log_id)
         dv_for_send_txt_type, dv_for_send_text = binlog2sql.process_binlog()
+        #
+        # если заливка данных в кликхаус прошла с ошибкой, то делаем отметку об этом
+        if dv_for_send_txt_type == 'SUCCESS':
+            dv_cfg_last_run_is_success = '1'
+        else:
+            dv_cfg_last_run_is_success = '0'
+        #
         os.remove(dv_file_lib_path)
     except Exception as ERROR:
         dv_for_send_txt_type = 'ERROR'
         dv_for_send_text = f"{ERROR = }"
     finally:
+        # сохраняем информацию о результате работы скрипта (успешно/ошибка)
+        try:
+            dv_cfg.set('DEFAULT', 'last_run_is_success', dv_cfg_last_run_is_success)
+        except Exception as ERROR:
+            logger.error(f"{ERROR = }")
+            pass
         # получаем информацию о свободном месте на диске в гигабайтах
         dv_disk_space_free_end, dv_statvfs_blocks, dv_result_bool = get_disk_space()
         logger.info(f"{dv_disk_space_free_end = } Gb")
