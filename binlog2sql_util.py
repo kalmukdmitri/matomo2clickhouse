@@ -5,7 +5,10 @@
 # Replication Matomo from MySQL to ClickHouse
 # Репликация Matomo: переливка данных из MySQL в ClickHouse
 #
-binlog2sql_util_version = '230404.01'
+binlog2sql_util_version = '230510.01'
+#
+# 230510.01:
+# + отключил get_correct_sql
 #
 # 230404.01:
 # + добавил поля sql_4insert_table и sql_4insert_values - для объединения инсертов в один большой
@@ -50,17 +53,17 @@ def get_schema_clickhouse(in_schema=''):
 
 
 def get_correct_sql(sql=''):
-    # sql = sql.replace('=NULL', ' is NULL')
-    #
-    sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r", \1", sql)
-    sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r", '\1'", sql)
-    #
-    sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r"`=\1", sql)
-    sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r"`='\1'", sql)
-    #
-    sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])' AND", r"`=\1 AND", sql)
-    sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9]) AND", r"`='\1' AND", sql)
-    #
+    # # sql = sql.replace('=NULL', ' is NULL')
+    # #
+    # sql = re.sub(r", '([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r", \1", sql)
+    # sql = re.sub(r", ([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r", '\1'", sql)
+    # #
+    # sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])'", r"`=\1", sql)
+    # sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])", r"`='\1'", sql)
+    # #
+    # sql = re.sub(r"`='([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9])' AND", r"`=\1 AND", sql)
+    # sql = re.sub(r"`=([-]{0,1}[0-9]{1,16}[.][0-9]{1,16}[e]{0,8}[0-9]) AND", r"`='\1' AND", sql)
+    # #
     return sql
 
 
@@ -262,9 +265,9 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
             sql_4insert_table = pattern['sql_4insert_table']
             # print(f"{sql_4insert_table = }")
             sql_4insert_values = cursor.mogrify(pattern['sql_4insert_values'], pattern['values'])
-            # print(f"{sql_4insert_values = }")
+            # print(f"BEFORE: {sql_4insert_values = }")
             sql_4insert_values = get_correct_sql(sql_4insert_values)
-            # print(f"{sql_4insert_values = }")
+            # print(f"AFTER: {sql_4insert_values = }")
         sql = cursor.mogrify(pattern['template'], pattern['values'])
         # print(f"{sql = }")
         sql = get_correct_sql(sql)
